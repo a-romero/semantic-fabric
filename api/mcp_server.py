@@ -11,7 +11,10 @@ from __future__ import annotations
 
 from fabric_client.models import IngestRequest, SearchRequest
 
+from ingest.markdown import ingest_markdown_tree
+
 from . import stubs
+from .state import get_index
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -30,12 +33,13 @@ def build_server():  # noqa: ANN201 - FastMCP type optional at import time
     def search(query: str, section: str = "", top_k: int = 5) -> list[dict]:
         """Hybrid retrieval over the fabric. Returns evidence units."""
         req = SearchRequest(query=query, section=section or None, top_k=top_k)
-        return [u.model_dump() for u in stubs.stub_search_units(req.query, req.section, req.top_k)]
+        units = get_index().search(req.query, section=req.section, top_k=req.top_k)
+        return [u.model_dump() for u in units]
 
     @mcp.tool()
     def graph_query(entity: str, hops: int = 1) -> list[dict]:
-        """Expand from an entity to connected facts (GraphRAG)."""
-        return [u.model_dump() for u in stubs.stub_search_units(entity, None, hops + 1)]
+        """Expand from an entity/page to connected facts (GraphRAG)."""
+        return [u.model_dump() for u in get_index().graph_expand(entity, hops=hops)]
 
     @mcp.tool()
     def get_chunk(ref: str) -> str:
@@ -50,7 +54,10 @@ def build_server():  # noqa: ANN201 - FastMCP type optional at import time
     @mcp.tool()
     def ingest(kind: str, namespace: str = "authored", uri: str = "") -> dict:
         """Push a source to the fabric for ingestion."""
-        IngestRequest(kind=kind, namespace=namespace, uri=uri or None)
+        req = IngestRequest(kind=kind, namespace=namespace, uri=uri or None)
+        if req.kind == "markdown_tree":
+            added = ingest_markdown_tree(get_index(), req)
+            return {"job_id": f"md-{added}", "status": "done", "detail": f"ingested {added} chunks"}
         return stubs.stub_ingest_job().model_dump()
 
     @mcp.tool()

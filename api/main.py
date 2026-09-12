@@ -51,8 +51,8 @@ def search(req: SearchRequest) -> SearchResponse:
 
 @app.post("/graph/expand", response_model=SearchResponse)
 def graph_expand(req: GraphExpandRequest) -> SearchResponse:
-    # Phase 0: reuse the search stub as placeholder graph neighbours.
-    units = stubs.stub_search_units(req.seed, None, top_k=req.hops + 1)
+    # Phase 1: real GraphRAG expansion from a seed (page path or topic) to connected pages.
+    units = get_index().graph_expand(req.seed, hops=req.hops, rel_types=req.rel_types)
     return SearchResponse(units=units)
 
 

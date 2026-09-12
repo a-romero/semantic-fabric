@@ -1,9 +1,10 @@
 """RetrievalIndex — hybrid (vector + BM25) retrieval over ingested chunks.
 
-Phase 1 covers the authored KB. Results are fused with Reciprocal Rank Fusion (RRF),
-which is robust without score calibration across the two very different scales
-(cosine similarity vs. BM25). Graph expansion (the third leg) arrives with the graph
-store; this class exposes ``search`` returning fabric_client EvidenceUnits.
+Phase 1 covers the authored KB. ``search`` fuses vector + BM25 rankings with
+Reciprocal Rank Fusion (RRF), robust without score calibration across the two very
+different scales. ``graph_expand`` adds the third GraphRAG leg — traversal over the
+page graph (hierarchy + shared-topic edges) built at ingest. Both return
+fabric_client EvidenceUnits.
 """
 
 from __future__ import annotations
@@ -12,12 +13,34 @@ import os
 
 from fabric_client.models import EvidenceType, EvidenceUnit, Provenance
 
+from graph.store import GraphStore, InMemoryGraphStore, build_graph_store
+
 from .bm25 import BM25Index
 from .chunking import Chunk, chunk_page
 from .embedder import Embedder, build_embedder
 from .vector_store import VectorStore, build_vector_store
 
 RRF_K = 60  # standard RRF damping constant
+
+
+def _page_summary(frontmatter: dict, body: str) -> str:
+    fm = frontmatter.get("summary")
+    if fm:
+        return str(fm)
+    text = " ".join(body.split())
+    return text[:200] + ("…" if len(text) > 200 else "")
+
+
+def _page_topics(frontmatter: dict) -> list[str]:
+    topics = frontmatter.get("topics") or []
+    keywords = frontmatter.get("keywords") or []
+    out: list[str] = []
+    for coll in (topics, keywords):
+        if isinstance(coll, list):
+            out.extend(str(x) for x in coll)
+        elif coll:
+            out.append(str(coll))
+    return out
 
 
 def _summary_for(chunk: Chunk) -> str:
@@ -29,9 +52,15 @@ def _summary_for(chunk: Chunk) -> str:
 
 
 class RetrievalIndex:
-    def __init__(self, embedder: Embedder, vector_store: VectorStore) -> None:
+    def __init__(
+        self,
+        embedder: Embedder,
+        vector_store: VectorStore,
+        graph_store: GraphStore | None = None,
+    ) -> None:
         self._embedder = embedder
         self._vs = vector_store
+        self._graph = graph_store if graph_store is not None else InMemoryGraphStore()
         self._bm25 = BM25Index()
         self._chunks: dict[str, Chunk] = {}
 
@@ -40,13 +69,19 @@ class RetrievalIndex:
         """Ingest Markdown pages: [{path, frontmatter, body}]. Returns chunk count."""
         new_chunks: list[Chunk] = []
         for page in pages:
+            path = page["path"]
+            frontmatter = page.get("frontmatter") or {}
+            body = page.get("body") or ""
             new_chunks.extend(
-                chunk_page(
-                    namespace=namespace,
-                    path=page["path"],
-                    frontmatter=page.get("frontmatter") or {},
-                    body=page.get("body") or "",
-                )
+                chunk_page(namespace=namespace, path=path, frontmatter=frontmatter, body=body)
+            )
+            # Register the page in the graph (hierarchy + topic edges derived on expand).
+            self._graph.add_page(
+                path=path,
+                title=str(frontmatter.get("title") or path),
+                summary=_page_summary(frontmatter, body),
+                topics=_page_topics(frontmatter),
+                section=path.split("/", 1)[0] if "/" in path else "",
             )
         if not new_chunks:
             return 0
@@ -100,6 +135,29 @@ class RetrievalIndex:
                 break
         return units
 
+    # -- graph expansion (GraphRAG third leg) -----------------------------
+    def graph_expand(
+        self, seed: str, hops: int = 1, rel_types: list[str] | None = None, limit: int = 10
+    ) -> list[EvidenceUnit]:
+        """Expand from a seed (page path or topic) to connected pages as evidence."""
+        hits = self._graph.expand(seed, hops=hops, rel_types=rel_types, limit=limit)
+        units: list[EvidenceUnit] = []
+        for h in hits:
+            units.append(
+                EvidenceUnit(
+                    id=f"graph:{h['path']}",
+                    path=h["path"],
+                    title=h["title"],
+                    summary=h["summary"],
+                    type=EvidenceType.fact,
+                    content=f"Related to '{seed}' via {h['relation']} ({h['distance']} hop(s)).",
+                    score=round(1.0 / (1 + h["distance"]), 6),
+                    provenance=Provenance(source_id=h["path"], locator=h["path"]),
+                    entities=[seed],
+                )
+            )
+        return units
+
 
 def build_index_from_env() -> RetrievalIndex:
     """Construct a RetrievalIndex from environment config."""
@@ -110,4 +168,5 @@ def build_index_from_env() -> RetrievalIndex:
         url=os.getenv("QDRANT_URL"),
         collection=os.getenv("QDRANT_COLLECTION", "authored"),
     )
-    return RetrievalIndex(embedder, vs)
+    graph = build_graph_store(os.getenv("GRAPH_STORE"))
+    return RetrievalIndex(embedder, vs, graph)
