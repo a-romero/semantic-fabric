@@ -1,39 +1,178 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/a-romero/semantic-fabric/contracts/evidence_unit.schema.json",
-  "title": "EvidenceUnit",
-  "description": "Committed snapshot generated from fabric_client.models.EvidenceUnit. Regenerate with `make contracts`. Backward-compatible additions only.",
-  "type": "object",
-  "required": ["path"],
+  "$defs": {
+    "EvidenceType": {
+      "description": "What kind of thing an evidence unit carries. Origin-agnostic to the agent.",
+      "enum": [
+        "markdown_chunk",
+        "pdf_chunk",
+        "chart_caption",
+        "fact",
+        "table_row",
+        "db_value",
+        "decision"
+      ],
+      "title": "EvidenceType",
+      "type": "string"
+    },
+    "Provenance": {
+      "description": "Where an evidence unit came from. Powers citations and audit.",
+      "properties": {
+        "source_id": {
+          "description": "Doc/page id or connector URI",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "source_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Upstream URL, when known",
+          "title": "Source Url"
+        },
+        "locator": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "e.g. 'page=12;bbox=...' or 'authored/investments/isas.md#overview'",
+          "title": "Locator"
+        },
+        "valid_time": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Bi-temporal: when true in the world (ISO 8601)",
+          "title": "Valid Time"
+        },
+        "recorded_time": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Bi-temporal: when learned (ISO 8601)",
+          "title": "Recorded Time"
+        },
+        "prov_o": {
+          "additionalProperties": true,
+          "description": "W3C PROV-O payload",
+          "title": "Prov O",
+          "type": "object"
+        },
+        "credibility": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Source credibility score, 0..1",
+          "title": "Credibility"
+        }
+      },
+      "required": [
+        "source_id"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    }
+  },
+  "description": "The single normalized shape every retrieval mode returns.\n\nThe (path, title, summary) trio is kept for backward compatibility with\nskilled-agent's existing KnowledgeGraph.search() consumers; `to_legacy()`\nprojects down to exactly that dict.",
   "properties": {
-    "path": {"type": "string", "description": "Canonical locator; a KB path for Markdown units"},
-    "title": {"type": "string", "default": ""},
-    "summary": {"type": "string", "default": ""},
-    "id": {"type": "string", "default": ""},
+    "path": {
+      "description": "Canonical locator; a KB path for Markdown units",
+      "title": "Path",
+      "type": "string"
+    },
+    "title": {
+      "default": "",
+      "title": "Title",
+      "type": "string"
+    },
+    "summary": {
+      "default": "",
+      "title": "Summary",
+      "type": "string"
+    },
+    "id": {
+      "default": "",
+      "title": "Id",
+      "type": "string"
+    },
     "type": {
-      "type": "string",
-      "enum": ["markdown_chunk", "pdf_chunk", "chart_caption", "fact", "table_row", "db_value", "decision"],
+      "$ref": "#/$defs/EvidenceType",
       "default": "markdown_chunk"
     },
-    "content": {"type": "string", "default": ""},
-    "score": {"type": "number", "default": 0.0},
-    "provenance": {"$ref": "#/$defs/Provenance"},
-    "entities": {"type": "array", "items": {"type": "string"}, "default": []},
-    "embedding_ref": {"type": ["string", "null"], "default": null}
-  },
-  "$defs": {
-    "Provenance": {
-      "type": "object",
-      "required": ["source_id"],
-      "properties": {
-        "source_id": {"type": "string"},
-        "source_url": {"type": ["string", "null"]},
-        "locator": {"type": ["string", "null"]},
-        "valid_time": {"type": ["string", "null"]},
-        "recorded_time": {"type": ["string", "null"]},
-        "prov_o": {"type": "object"},
-        "credibility": {"type": ["number", "null"]}
-      }
+    "content": {
+      "default": "",
+      "description": "Retrievable payload: chunk / caption / fact text",
+      "title": "Content",
+      "type": "string"
+    },
+    "score": {
+      "default": 0.0,
+      "title": "Score",
+      "type": "number"
+    },
+    "provenance": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Provenance"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "entities": {
+      "description": "Linked graph node ids",
+      "items": {
+        "type": "string"
+      },
+      "title": "Entities",
+      "type": "array"
+    },
+    "embedding_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Embedding Ref"
     }
-  }
+  },
+  "required": [
+    "path"
+  ],
+  "title": "EvidenceUnit",
+  "type": "object"
 }

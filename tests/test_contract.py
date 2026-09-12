@@ -6,10 +6,10 @@ expectations will be added here so a breaking change fails in semantic-fabric's 
 not in production.
 """
 
+from fabric_client.models import EvidenceUnit, SearchResponse
 from fastapi.testclient import TestClient
 
 from api.main import app
-from fabric_client.models import EvidenceUnit, SearchResponse
 
 client = TestClient(app)
 
@@ -29,7 +29,9 @@ def test_health_reports_contract_version():
 
 
 def test_search_returns_valid_units():
-    r = client.post("/search", json={"query": "what are ISAs?", "section": "investments", "top_k": 2})
+    r = client.post(
+        "/search", json={"query": "what are ISAs?", "section": "investments", "top_k": 2}
+    )
     assert r.status_code == 200
     resp = SearchResponse.model_validate(r.json())
     assert len(resp.units) == 2

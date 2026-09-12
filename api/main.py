@@ -9,8 +9,6 @@ Run: uvicorn api.main:app --reload --port 8080
 
 from __future__ import annotations
 
-from fastapi import FastAPI
-
 from fabric_client.models import (
     CONTRACT_VERSION,
     Decision,
@@ -23,6 +21,7 @@ from fabric_client.models import (
     SearchRequest,
     SearchResponse,
 )
+from fastapi import FastAPI
 
 from . import stubs
 

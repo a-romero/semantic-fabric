@@ -51,7 +51,9 @@ class FabricClient:
         r.raise_for_status()
         return SearchResponse.model_validate(r.json()).units
 
-    def graph_expand(self, seed: str, hops: int = 1, rel_types: list[str] | None = None) -> list[EvidenceUnit]:
+    def graph_expand(
+        self, seed: str, hops: int = 1, rel_types: list[str] | None = None
+    ) -> list[EvidenceUnit]:
         req = GraphExpandRequest(seed=seed, hops=hops, rel_types=rel_types)
         r = self._c.post("/graph/expand", json=req.model_dump())
         r.raise_for_status()

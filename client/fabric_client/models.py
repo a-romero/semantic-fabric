@@ -41,7 +41,9 @@ class Provenance(BaseModel):
     locator: str | None = Field(
         None, description="e.g. 'page=12;bbox=...' or 'authored/investments/isas.md#overview'"
     )
-    valid_time: str | None = Field(None, description="Bi-temporal: when true in the world (ISO 8601)")
+    valid_time: str | None = Field(
+        None, description="Bi-temporal: when true in the world (ISO 8601)"
+    )
     recorded_time: str | None = Field(None, description="Bi-temporal: when learned (ISO 8601)")
     prov_o: dict[str, Any] = Field(default_factory=dict, description="W3C PROV-O payload")
     credibility: float | None = Field(None, description="Source credibility score, 0..1")
