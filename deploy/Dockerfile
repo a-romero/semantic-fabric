@@ -7,6 +7,7 @@ COPY api/ ./api/
 COPY ingest/ ./ingest/
 COPY retrieval/ ./retrieval/
 COPY graph/ ./graph/
+COPY kb/ ./kb/
 COPY reasoning/ ./reasoning/
 COPY provenance/ ./provenance/
 

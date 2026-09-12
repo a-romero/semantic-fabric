@@ -13,12 +13,26 @@ from __future__ import annotations
 
 from fabric_client.models import IngestRequest
 
+from kb.store import KBStore
 from retrieval.index import RetrievalIndex
 
 
-def ingest_markdown_tree(index: RetrievalIndex, req: IngestRequest) -> int:
-    """Ingest the pages in a markdown_tree request. Returns chunks added."""
+def ingest_markdown_tree(index: RetrievalIndex, kb: KBStore, req: IngestRequest) -> int:
+    """Ingest a markdown_tree request into the index and mirror pages into the KB.
+
+    The pages become retrievable chunks (and graph nodes) via the index, and are also
+    stored under the authored/ namespace so GET /kb/authored/<path> can read them.
+    Returns chunks added.
+    """
     pages = req.payload.get("pages") or []
     if not isinstance(pages, list):
         raise ValueError("payload.pages must be a list of {path, frontmatter, body}")
-    return index.add_pages(pages, namespace=req.namespace)
+    added = index.add_pages(pages, namespace=req.namespace)
+    for page in pages:
+        kb.put(
+            "authored",
+            page["path"],
+            body=page.get("body") or "",
+            frontmatter=page.get("frontmatter") or {},
+        )
+    return added

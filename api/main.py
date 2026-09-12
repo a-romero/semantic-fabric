@@ -25,9 +25,10 @@ from fabric_client.models import (
 from fastapi import FastAPI
 
 from ingest.markdown import ingest_markdown_tree
+from ingest.pdf import ingest_pdf_batch
 
 from . import stubs
-from .state import get_index
+from .state import get_index, get_kb, get_object_store
 
 app = FastAPI(
     title="semantic-fabric",
@@ -64,15 +65,13 @@ def get_chunk(ref: str) -> dict:
 # -- knowledge base (authored + generated namespaces) ------------------------
 @app.get("/kb/{namespace}/tree")
 def list_kb(namespace: str) -> dict:
-    return {
-        "namespace": namespace,
-        "tree": {"name": namespace, "type": "directory", "path": "", "children": []},
-    }
+    return get_kb().tree(namespace)
 
 
 @app.get("/kb/{namespace}/{path:path}", response_model=KBPage)
 def read_page(namespace: str, path: str) -> KBPage:
-    return stubs.stub_kb_page(namespace, path)
+    page = get_kb().get(namespace, path)
+    return page if page is not None else stubs.stub_kb_page(namespace, path)
 
 
 # -- ingestion ---------------------------------------------------------------
@@ -81,13 +80,25 @@ def ingest(req: IngestRequest) -> IngestJob:
     # Push entry point: anyone can POST a source here from anywhere.
     if req.kind == "markdown_tree":
         try:
-            added = ingest_markdown_tree(get_index(), req)
+            added = ingest_markdown_tree(get_index(), get_kb(), req)
         except ValueError as exc:
             return IngestJob(job_id="ingest-error", status="failed", detail=str(exc))
+        return IngestJob(job_id=f"md-{added}", status="done", detail=f"ingested {added} chunks")
+    if req.kind == "pdf_batch":
+        try:
+            stats = ingest_pdf_batch(get_index(), get_kb(), get_object_store(), req)
+        except (ValueError, KeyError) as exc:
+            return IngestJob(job_id="ingest-error", status="failed", detail=str(exc))
         return IngestJob(
-            job_id=f"md-{added}", status="done", detail=f"ingested {added} chunks"
+            job_id=f"pdf-{stats['docs']}",
+            status="done",
+            detail=(
+                f"{stats['docs']} docs -> {stats['chunks']} chunks "
+                f"({stats['tables']} tables, {stats['figures']} figures), "
+                f"{stats['generated_pages']} generated pages"
+            ),
         )
-    # Phase 2 adds pdf_batch / connector pipelines; queue a stub for now.
+    # Other kinds (connector, …) are added in later phases.
     return stubs.stub_ingest_job()
 
 

@@ -11,13 +11,16 @@ lightweight [`fabric-client`](client/) package. The full rationale lives in
 skilled-agent's `docs/SEMANTICA_SEPARATION_DESIGN.md` and
 `docs/SEMANTICA_INTEGRATION_VISION.md`.
 
-> **Status: Phase 1 (retrieval).** `/ingest` (markdown_tree) and `/search` are real:
-> push authored Markdown, and get hybrid (vector + BM25, RRF-fused) results back as
-> evidence units with provenance. It runs on pure-Python defaults out of the box
-> (hashing embedder + in-memory vectors); set `VECTOR_STORE=qdrant` and
+> **Status: Phase 2 (dense sources).** Real and wired: `/search` (hybrid vector +
+> BM25, RRF-fused), `/graph/expand` (GraphRAG over a page graph), `/ingest` for
+> `markdown_tree` **and** `pdf_batch` (prose → pdf_chunk, tables → table_row,
+> figures → object store + chart_caption), and the fabric-owned **`generated/`**
+> namespace (dense-doc summary trees) served via `GET /kb/...` alongside `authored/`.
+> Runs on pure-Python defaults out of the box (hashing embedder + in-memory vectors +
+> in-memory graph/KB/object store); set `VECTOR_STORE=qdrant`,
 > `EMBEDDING_MODEL=BAAI/bge-m3` (install `.[prod]`) for the production backends.
-> Graph expansion, reasoning, decisions, and the `generated/` namespace remain stubs
-> until their phases.
+> Reasoning and decisions remain stubs until Phase 3; a real PDF layout parser and VLM
+> captioner are pluggable optional layers over the pre-parsed `pdf_batch` path.
 
 ## The boundary
 
@@ -103,9 +106,10 @@ make run
 ## Roadmap
 
 - **Phase 0** — contract + client + stub API; consumers integrate. ✅
-- **Phase 1** — real hybrid retrieval (vector + BM25) over the pushed authored KB. ✅
-  Graph expansion (the third leg) lands with the graph store.
-- **Phase 2** — dense-PDF ingestion (incl. figure/VLM branch) + one connector; emit
-  the `generated/` namespace.
+- **Phase 1** — hybrid retrieval (vector + BM25) + GraphRAG expansion over the
+  authored KB. ✅
+- **Phase 2** — dense-PDF ingestion (prose/tables/figures, figure/VLM branch) + the
+  `generated/` namespace. ✅ (pre-parsed `pdf_batch`; real layout parser + one
+  enterprise connector are the remaining pluggable pieces.)
 - **Phase 3** — reasoning guardrails + decision/provenance recording.
 - **Phase 4** — serve additional consumers over MCP (org-wide context layer).

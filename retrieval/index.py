@@ -83,14 +83,22 @@ class RetrievalIndex:
                 topics=_page_topics(frontmatter),
                 section=path.split("/", 1)[0] if "/" in path else "",
             )
-        if not new_chunks:
+        return self.add_chunks(new_chunks)
+
+    def add_chunks(self, chunks: list[Chunk]) -> int:
+        """Embed, index (BM25) and store already-built chunks of any evidence type.
+
+        Used by the markdown path and by the dense-source pipeline (pdf_chunk,
+        chart_caption, table_row). Returns the number of chunks added.
+        """
+        if not chunks:
             return 0
-        vectors = self._embedder.embed([c.text for c in new_chunks])
-        self._vs.upsert([c.id for c in new_chunks], vectors)
-        for c in new_chunks:
+        vectors = self._embedder.embed([c.text for c in chunks])
+        self._vs.upsert([c.id for c in chunks], vectors)
+        for c in chunks:
             self._bm25.add(c.id, f"{c.page_title} {c.section_title} {c.text}")
             self._chunks[c.id] = c
-        return len(new_chunks)
+        return len(chunks)
 
     @property
     def size(self) -> int:
@@ -119,16 +127,21 @@ class RetrievalIndex:
                 continue
             if section and not chunk.path.startswith(f"{section}/"):
                 continue
+            prov_o = {"image_ref": chunk.image_ref} if chunk.image_ref else {}
             units.append(
                 EvidenceUnit(
                     id=chunk.id,
                     path=chunk.path,
                     title=chunk.page_title,
                     summary=_summary_for(chunk),
-                    type=EvidenceType.markdown_chunk,
+                    type=EvidenceType(chunk.etype),
                     content=chunk.text,
                     score=round(score, 6),
-                    provenance=Provenance(source_id=chunk.path, locator=chunk.locator),
+                    provenance=Provenance(
+                        source_id=chunk.source_id or chunk.path,
+                        locator=chunk.locator,
+                        prov_o=prov_o,
+                    ),
                 )
             )
             if len(units) >= top_k:

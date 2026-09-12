@@ -24,9 +24,16 @@ class Chunk:
     section_title: str
     text: str
     frontmatter: dict[str, Any] = field(default_factory=dict)
+    # Generalized fields (default to markdown behaviour). Dense sources set these.
+    etype: str = "markdown_chunk"          # matches fabric_client EvidenceType values
+    source_id: str | None = None           # doc/page id; defaults to path
+    override_locator: str | None = None    # e.g. "page=12;bbox=88,204,512,470"
+    image_ref: str | None = None           # object-store ref for a figure
 
     @property
     def locator(self) -> str:
+        if self.override_locator:
+            return self.override_locator
         anchor = self.section_title.strip().lower().replace(" ", "-")
         return f"{self.path}#{anchor}" if anchor else self.path
 
