@@ -45,7 +45,11 @@ class InMemoryVectorStore:
 
 
 class QdrantVectorStore:
-    """Production vector store (Qdrant). Optional heavy dependency."""
+    """Production vector store (Qdrant). Optional dependency (qdrant-client).
+
+    ``url`` may be ``:memory:`` (or ``memory``) for an in-process instance — handy for
+    tests and local runs — or an ``http://host:port`` URL for a Qdrant server.
+    """
 
     def __init__(self, url: str, collection: str, dim: int) -> None:
         try:
@@ -53,8 +57,13 @@ class QdrantVectorStore:
             from qdrant_client.models import Distance, VectorParams
         except ImportError as exc:  # pragma: no cover - prod installs only
             raise RuntimeError("Qdrant requires qdrant-client: pip install qdrant-client") from exc
-        self._client = QdrantClient(url=url)
+        if url.strip().lower() in {":memory:", "memory"}:
+            self._client = QdrantClient(location=":memory:")
+        else:
+            self._client = QdrantClient(url=url)
         self._collection = collection
+        # Counter for stable integer point ids (Qdrant ids must be int/UUID).
+        self._next_id = 0
         if not self._client.collection_exists(collection):
             self._client.create_collection(
                 collection_name=collection,
@@ -64,17 +73,17 @@ class QdrantVectorStore:
     def upsert(self, ids: list[str], vectors: list[list[float]]) -> None:
         from qdrant_client.models import PointStruct
 
-        # Qdrant point ids must be ints or UUIDs; keep the string id in the payload.
-        points = [
-            PointStruct(id=abs(hash(i)) % (10**18), vector=v, payload={"chunk_id": i})
-            for i, v in zip(ids, vectors)
-        ]
+        # Keep the string chunk id in the payload; assign monotonic integer point ids.
+        points = []
+        for i, v in zip(ids, vectors):
+            points.append(PointStruct(id=self._next_id, vector=v, payload={"chunk_id": i}))
+            self._next_id += 1
         self._client.upsert(collection_name=self._collection, points=points)
 
     def query(self, vector: list[float], top_k: int) -> list[tuple[str, float]]:
-        hits = self._client.search(
-            collection_name=self._collection, query_vector=vector, limit=top_k
-        )
+        hits = self._client.query_points(
+            collection_name=self._collection, query=vector, limit=top_k
+        ).points
         return [(h.payload["chunk_id"], float(h.score)) for h in hits]
 
 

@@ -71,6 +71,21 @@ make test             # contract tests
 make mcp              # run the MCP server (needs the `mcp` extra)
 ```
 
+### Production backends
+
+```bash
+pip install -e ".[prod]"      # qdrant-client + FlagEmbedding
+docker compose up -d qdrant   # or point QDRANT_URL at any Qdrant; ':memory:' needs no server
+export VECTOR_STORE=qdrant QDRANT_URL=http://localhost:6333 EMBEDDING_MODEL=BAAI/bge-m3
+make run
+```
+
+- **Qdrant** is validated end to end (its in-memory mode is used by `tests/test_qdrant.py`).
+- **BGE-M3** downloads ~2.3GB of weights from HuggingFace on first load, so it needs a
+  host with HF egress (or a pre-provisioned model / `HF_ENDPOINT` mirror / a local model
+  path as `EMBEDDING_MODEL`). `tests/test_bge_m3.py` skips gracefully where the model
+  isn't reachable.
+
 ## API surface
 
 | Concern | REST | MCP tool |
