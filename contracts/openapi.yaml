@@ -1,0 +1,57 @@
+# semantic-fabric REST contract (hand-maintained overview).
+# FastAPI also emits a live spec at /openapi.json; this file is the human-readable
+# reference for the boundary and the basis for consumer-driven contract tests.
+openapi: 3.1.0
+info:
+  title: semantic-fabric
+  version: 0.1.0
+  description: Enterprise semantic layer — retrieval, graph, ingestion, reasoning, provenance.
+servers:
+  - url: http://semantic-fabric:8080
+paths:
+  /health:
+    get:
+      summary: Liveness + contract version
+      responses: {"200": {description: ok}}
+  /search:
+    post:
+      summary: Hybrid retrieval (vector + BM25 + graph). Returns evidence units.
+      responses: {"200": {description: SearchResponse}}
+  /graph/expand:
+    post:
+      summary: Expand from an entity/pattern to connected facts (GraphRAG).
+      responses: {"200": {description: SearchResponse}}
+  /chunk/{ref}:
+    get:
+      summary: Fetch full chunk content by reference.
+      responses: {"200": {description: chunk}}
+  /kb/{namespace}/tree:
+    get:
+      summary: Browse a KB namespace (authored | generated).
+      responses: {"200": {description: tree}}
+  /kb/{namespace}/{path}:
+    get:
+      summary: Read a KB page (authored or generated) as Markdown.
+      responses: {"200": {description: KBPage}}
+  /ingest:
+    post:
+      summary: Push a source (markdown_tree | pdf_batch | connector) for ingestion.
+      responses: {"200": {description: IngestJob}}
+  /jobs/{job_id}:
+    get:
+      summary: Ingestion job status.
+      responses: {"200": {description: IngestJob}}
+  /reason:
+    post:
+      summary: Deterministic reasoning (SPARQL/Datalog/SHACL) with a rule trace.
+      responses: {"200": {description: ReasonResponse}}
+  /decisions:
+    post:
+      summary: Record an agent decision with its evidence chain.
+      responses: {"200": {description: decision id}}
+  /decisions/{decision_id}/chain:
+    get:
+      summary: Trace a decision's causal ancestry (PROV-O).
+      responses: {"200": {description: chain}}
+# Schemas are single-sourced in client/fabric_client/models.py; see
+# contracts/evidence_unit.schema.json for the EvidenceUnit snapshot.

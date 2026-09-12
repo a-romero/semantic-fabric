@@ -1,0 +1,19 @@
+# Phase 0: the fabric service alone, on stubs.
+# Later phases add services here (pgvector/Qdrant, an RDF/LPG graph store, MinIO).
+services:
+  semantic-fabric:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      # placeholders for later phases
+      VECTOR_STORE: pgvector
+      GRAPH_STORE: lpg
+      ENABLE_REASONING: "false"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/health').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

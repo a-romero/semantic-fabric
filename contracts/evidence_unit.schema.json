@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/a-romero/semantic-fabric/contracts/evidence_unit.schema.json",
+  "title": "EvidenceUnit",
+  "description": "Committed snapshot generated from fabric_client.models.EvidenceUnit. Regenerate with `make contracts`. Backward-compatible additions only.",
+  "type": "object",
+  "required": ["path"],
+  "properties": {
+    "path": {"type": "string", "description": "Canonical locator; a KB path for Markdown units"},
+    "title": {"type": "string", "default": ""},
+    "summary": {"type": "string", "default": ""},
+    "id": {"type": "string", "default": ""},
+    "type": {
+      "type": "string",
+      "enum": ["markdown_chunk", "pdf_chunk", "chart_caption", "fact", "table_row", "db_value", "decision"],
+      "default": "markdown_chunk"
+    },
+    "content": {"type": "string", "default": ""},
+    "score": {"type": "number", "default": 0.0},
+    "provenance": {"$ref": "#/$defs/Provenance"},
+    "entities": {"type": "array", "items": {"type": "string"}, "default": []},
+    "embedding_ref": {"type": ["string", "null"], "default": null}
+  },
+  "$defs": {
+    "Provenance": {
+      "type": "object",
+      "required": ["source_id"],
+      "properties": {
+        "source_id": {"type": "string"},
+        "source_url": {"type": ["string", "null"]},
+        "locator": {"type": ["string", "null"]},
+        "valid_time": {"type": ["string", "null"]},
+        "recorded_time": {"type": ["string", "null"]},
+        "prov_o": {"type": "object"},
+        "credibility": {"type": ["number", "null"]}
+      }
+    }
+  }
+}
