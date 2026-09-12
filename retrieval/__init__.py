@@ -1,10 +1,13 @@
-"""Hybrid retrieval (Phase 1+): vector + BM25 + graph expansion.
+"""Hybrid retrieval (Phase 1): vector + BM25 over ingested chunks, fused with RRF.
 
-Wraps semantica.vector_store (pgvector/Qdrant/...) and the Context Graph, returning
-fabric_client.models.EvidenceUnit lists. This is what api.main.search() calls once
-the stubs are removed.
+Wraps a vector store (in-memory default; Qdrant in deployment) and a BM25 index,
+returning fabric_client.models.EvidenceUnit lists. Graph expansion (the third leg)
+arrives with the graph store. Public surface:
 
-Public entry (future):
-    def search_evidence(req: SearchRequest) -> list[EvidenceUnit]: ...
-    def graph_expand(req: GraphExpandRequest) -> list[EvidenceUnit]: ...
+    build_index_from_env() -> RetrievalIndex
+    RetrievalIndex.add_pages(pages, namespace) / .search(query, section, top_k)
 """
+
+from .index import RetrievalIndex, build_index_from_env
+
+__all__ = ["RetrievalIndex", "build_index_from_env"]

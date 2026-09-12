@@ -9,12 +9,15 @@ dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
     "pydantic>=2.5",
-    # heavy semantica-side deps (semantica, vector store, graph store, VLM) are
-    # added per phase; Phase 0 runs on stubs only.
+    # Phase 1 retrieval runs on pure-Python defaults (hashing embedder + in-memory
+    # vector store + built-in BM25) — no extra deps. The production backends below
+    # are optional and selected by config.
 ]
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.0"]
+# Production retrieval backends (Qdrant vector store + BGE-M3 embeddings).
+prod = ["qdrant-client>=1.9", "FlagEmbedding>=1.2"]
 dev = ["pytest>=8.0", "httpx>=0.27", "ruff>=0.4"]
 
 [tool.uv.sources]

@@ -28,20 +28,24 @@ def test_health_reports_contract_version():
     assert "contract_version" in r.json()
 
 
-def test_search_returns_valid_units():
+def test_search_returns_valid_units(sample_kb):
     r = client.post(
         "/search", json={"query": "what are ISAs?", "section": "investments", "top_k": 2}
     )
     assert r.status_code == 200
     resp = SearchResponse.model_validate(r.json())
-    assert len(resp.units) == 2
+    assert resp.units, "expected hits from the ingested investments KB"
+    assert all(u.path.startswith("investments/") for u in resp.units)
     # legacy projection still works for existing skilled-agent consumers
     legacy = [u.to_legacy() for u in resp.units]
     assert all(set(item) == {"path", "title", "summary"} for item in legacy)
 
 
 def test_ingest_returns_job():
-    r = client.post("/ingest", json={"kind": "markdown_tree", "namespace": "authored"})
+    r = client.post(
+        "/ingest",
+        json={"kind": "markdown_tree", "namespace": "authored", "payload": {"pages": []}},
+    )
     assert r.status_code == 200
     assert r.json()["status"] in {"queued", "running", "done"}
 

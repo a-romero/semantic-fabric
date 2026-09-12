@@ -1,5 +1,6 @@
-# Phase 0: the fabric service alone, on stubs.
-# Later phases add services here (pgvector/Qdrant, an RDF/LPG graph store, MinIO).
+# Phase 1: the fabric service with its retrieval infra.
+# Reasoning (Oxigraph RDF) is added at Phase 3; the graph store defaults to embedded
+# Kuzu (no service needed) for now.
 services:
   semantic-fabric:
     build:
@@ -8,12 +9,41 @@ services:
     ports:
       - "8080:8080"
     environment:
-      # placeholders for later phases
-      VECTOR_STORE: pgvector
-      GRAPH_STORE: lpg
+      VECTOR_STORE: qdrant
+      QDRANT_URL: http://qdrant:6333
+      EMBEDDING_MODEL: BAAI/bge-m3
+      GRAPH_STORE: lpg               # Kuzu (embedded); rdf/Oxigraph added at Phase 3
+      OBJECT_STORE_URI: s3://semantic-fabric   # MinIO below
+      OBJECT_STORE_ENDPOINT: http://minio:9000
       ENABLE_REASONING: "false"
+    depends_on:
+      - qdrant
+      - minio
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/health').status==200 else 1)"]
       interval: 30s
       timeout: 5s
       retries: 3
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+
+volumes:
+  qdrant-data:
+  minio-data:

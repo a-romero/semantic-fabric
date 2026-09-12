@@ -32,9 +32,9 @@ def test_health_probe_used_at_backend_construction():
     assert "contract_version" in body, "RemoteFabricBackend relies on /health returning a version"
 
 
-def test_search_units_project_to_legacy_shape():
+def test_search_units_project_to_legacy_shape(sample_kb):
     # This is the exact path RemoteFabricBackend.search follows.
-    r = client.post("/search", json={"query": "anything", "section": "investments", "top_k": 5})
+    r = client.post("/search", json={"query": "tax-efficient savings account", "top_k": 5})
     assert r.status_code == 200
     resp = SearchResponse.model_validate(r.json())
     assert resp.units, "consumer expects at least one unit for a matching query"
@@ -45,7 +45,7 @@ def test_search_units_project_to_legacy_shape():
         assert all(isinstance(legacy[k], str) for k in LEGACY_KEYS)
 
 
-def test_search_response_carries_contract_version():
-    r = client.post("/search", json={"query": "x", "top_k": 1})
+def test_search_response_carries_contract_version(sample_kb):
+    r = client.post("/search", json={"query": "insurance", "top_k": 1})
     assert r.status_code == 200
     assert SearchResponse.model_validate(r.json()).contract_version

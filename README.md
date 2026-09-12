@@ -11,9 +11,13 @@ lightweight [`fabric-client`](client/) package. The full rationale lives in
 skilled-agent's `docs/SEMANTICA_SEPARATION_DESIGN.md` and
 `docs/SEMANTICA_INTEGRATION_VISION.md`.
 
-> **Status: Phase 0 scaffold.** Every endpoint validates against the real wire
-> contract and returns stub data, so consumers can integrate against a stable
-> boundary before the retrieval/graph/ingestion machinery is built.
+> **Status: Phase 1 (retrieval).** `/ingest` (markdown_tree) and `/search` are real:
+> push authored Markdown, and get hybrid (vector + BM25, RRF-fused) results back as
+> evidence units with provenance. It runs on pure-Python defaults out of the box
+> (hashing embedder + in-memory vectors); set `VECTOR_STORE=qdrant` and
+> `EMBEDDING_MODEL=BAAI/bge-m3` (install `.[prod]`) for the production backends.
+> Graph expansion, reasoning, decisions, and the `generated/` namespace remain stubs
+> until their phases.
 
 ## The boundary
 
@@ -83,9 +87,9 @@ make mcp              # run the MCP server (needs the `mcp` extra)
 
 ## Roadmap
 
-- **Phase 0 (this scaffold)** — contract + client + stub API; consumers integrate.
-- **Phase 1** — real hybrid retrieval + graph over the pushed authored KB; parity
-  with skilled-agent's current results.
+- **Phase 0** — contract + client + stub API; consumers integrate. ✅
+- **Phase 1** — real hybrid retrieval (vector + BM25) over the pushed authored KB. ✅
+  Graph expansion (the third leg) lands with the graph store.
 - **Phase 2** — dense-PDF ingestion (incl. figure/VLM branch) + one connector; emit
   the `generated/` namespace.
 - **Phase 3** — reasoning guardrails + decision/provenance recording.

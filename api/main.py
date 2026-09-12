@@ -1,8 +1,9 @@
 """semantic-fabric REST API — the network boundary.
 
-Phase 0: every route validates against the real wire contract (fabric_client.models)
-and returns stub data. Later phases replace the stub calls with retrieval/, graph/,
-ingest/, reasoning/, and provenance/ implementations without changing these signatures.
+Every route validates against the real wire contract (fabric_client.models).
+Phase 1 wires /ingest (markdown_tree) and /search to real hybrid retrieval over the
+ingested authored KB; graph expansion, reasoning, decisions, and the generated/ KB
+namespace remain stubs until their phases land. Route signatures never change.
 
 Run: uvicorn api.main:app --reload --port 8080
 """
@@ -23,7 +24,10 @@ from fabric_client.models import (
 )
 from fastapi import FastAPI
 
+from ingest.markdown import ingest_markdown_tree
+
 from . import stubs
+from .state import get_index
 
 app = FastAPI(
     title="semantic-fabric",
@@ -40,7 +44,8 @@ def health() -> dict:
 # -- retrieval ---------------------------------------------------------------
 @app.post("/search", response_model=SearchResponse)
 def search(req: SearchRequest) -> SearchResponse:
-    units = stubs.stub_search_units(req.query, req.section, req.top_k)
+    # Phase 1: real hybrid (vector + BM25) retrieval over the ingested authored KB.
+    units = get_index().search(req.query, section=req.section, top_k=req.top_k)
     return SearchResponse(units=units)
 
 
@@ -73,7 +78,16 @@ def read_page(namespace: str, path: str) -> KBPage:
 # -- ingestion ---------------------------------------------------------------
 @app.post("/ingest", response_model=IngestJob)
 def ingest(req: IngestRequest) -> IngestJob:
-    # Push entry point: anyone can POST a source here. Phase 0 queues a stub job.
+    # Push entry point: anyone can POST a source here from anywhere.
+    if req.kind == "markdown_tree":
+        try:
+            added = ingest_markdown_tree(get_index(), req)
+        except ValueError as exc:
+            return IngestJob(job_id="ingest-error", status="failed", detail=str(exc))
+        return IngestJob(
+            job_id=f"md-{added}", status="done", detail=f"ingested {added} chunks"
+        )
+    # Phase 2 adds pdf_batch / connector pipelines; queue a stub for now.
     return stubs.stub_ingest_job()
 
 

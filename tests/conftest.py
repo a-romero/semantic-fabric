@@ -1,0 +1,47 @@
+"""Shared test fixtures.
+
+Each test gets a fresh in-memory RetrievalIndex so state never leaks between tests,
+and a small authored KB it can ingest.
+"""
+
+import pytest
+
+from api import state
+from retrieval.embedder import HashingEmbedder
+from retrieval.index import RetrievalIndex
+from retrieval.vector_store import InMemoryVectorStore
+
+SAMPLE_PAGES = [
+    {
+        "path": "investments/isas/index.md",
+        "frontmatter": {"title": "ISAs", "summary": "Individual Savings Accounts explained."},
+        "body": (
+            "# ISAs\n\n"
+            "An ISA is a tax-efficient individual savings account for UK savers.\n\n"
+            "## Types\n\n"
+            "Cash ISA and stocks and shares ISA are the main types. A stocks and "
+            "shares ISA invests in funds and equities.\n"
+        ),
+    },
+    {
+        "path": "insurance/home/index.md",
+        "frontmatter": {"title": "Home Insurance"},
+        "body": (
+            "# Home Insurance\n\n"
+            "Home insurance covers your home and contents against damage and theft.\n"
+        ),
+    },
+]
+
+
+@pytest.fixture(autouse=True)
+def fresh_index():
+    """Reset the API's shared index to a clean in-memory instance per test."""
+    state.set_index(RetrievalIndex(HashingEmbedder(), InMemoryVectorStore()))
+    yield
+
+
+@pytest.fixture
+def sample_kb(fresh_index):
+    """Ingest the sample authored KB into the current index."""
+    state.get_index().add_pages(SAMPLE_PAGES, namespace="authored")
