@@ -197,7 +197,8 @@ The same capabilities are also exposed as **MCP tools** (`search`, `graph_query`
 
 | Symptom | Cause / fix |
 |---|---|
-| `cannot reach fabric at …` | Start the service first (§3, Terminal A). |
+| `could not GET …/health` but `curl` works | A proxy env var (`HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY`) is routing `localhost` through a corporate proxy (often a `400`/`407`). The driver already bypasses proxies; if it persists, `export NO_PROXY=localhost,127.0.0.1`. |
+| `could not GET …/health` (nothing listening) | Start the service first (§3, Terminal A). |
 | Extraction / Reason show `n/a` | You're on defaults — set `EXTRACTION_BACKEND=llm` + `EXTRACTION_ON_INGEST=true` + a model (§5). |
 | Knowledge graph is empty | Same as above — the graph is built from extracted entities/relations. |
 | PDFs reported as `failed` | Install `.[pdf]` and set `PDF_PARSER=pymupdf`. |

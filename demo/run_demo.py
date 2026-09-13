@@ -39,12 +39,21 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 
+# Bypass any HTTP(S)_PROXY / ALL_PROXY in the environment — the fabric is typically on
+# localhost, and a corporate proxy will 400/407 a request it should never have seen.
+_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
 def _req(method: str, url: str, body: dict | None = None, timeout: int = 120) -> dict:
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(url, data=data, method=method,
-                                 headers={"content-type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode())
+    headers = {"content-type": "application/json"} if data is not None else {}
+    req = urllib.request.Request(url, data=data, method=method, headers=headers)
+    try:
+        with _OPENER.open(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")[:300]
+        raise RuntimeError(f"HTTP {e.code} from {method} {url}: {detail}") from e
 
 
 def get(base: str, path: str) -> dict:
@@ -556,8 +565,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         health = get(base, "/health")
     except Exception as e:
-        print(f"error: cannot reach fabric at {base} ({e}).\n"
-              f"Start it first:  uvicorn api.main:app --port 8080", file=sys.stderr)
+        print(f"error: could not GET {base}/health — {e}\n"
+              f"If curl works but this doesn't, a proxy env var is likely intercepting "
+              f"localhost; the driver already bypasses proxies, but you can also set "
+              f"NO_PROXY=localhost,127.0.0.1. Otherwise start the service:  "
+              f"uvicorn api.main:app --port 8080", file=sys.stderr)
         return 2
 
     if args.make_sample_pdf:
