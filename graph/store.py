@@ -16,9 +16,24 @@ dependency-free and CI-testable.
 
 from __future__ import annotations
 
+import re
 from collections import deque
 from pathlib import PurePosixPath
 from typing import Protocol
+
+
+def datalog_const(s: str) -> str:
+    """Normalize an arbitrary label (entity name, page path) to a Datalog constant.
+
+    Datalog constants are lowercase alnum/underscore tokens starting with a letter, so
+    ``"Enhanced Pension Annuity"`` -> ``enhanced_pension_annuity`` and
+    ``"investments/isas/index.md"`` -> ``investments_isas_index_md``. Predicates are
+    normalized the same way (extraction already emits snake_case predicates).
+    """
+    c = re.sub(r"[^a-z0-9]+", "_", str(s).strip().lower()).strip("_")
+    if not c:
+        return "x"
+    return c if c[0].isalpha() else f"e_{c}"
 
 
 class GraphStore(Protocol):
@@ -34,6 +49,10 @@ class GraphStore(Protocol):
         self, seed: str, hops: int = 1, rel_types: list[str] | None = None, limit: int = 10
     ) -> list[dict]:
         """Return connected pages as dicts: {path, title, summary, relation, distance}."""
+        ...
+
+    def facts(self) -> list[str]:
+        """The knowledge graph as Datalog atoms for reasoning over the KG itself."""
         ...
 
 
@@ -204,6 +223,19 @@ class InMemoryGraphStore:
             )
         results.sort(key=lambda r: (r["distance"], r["title"]))
         return results[:limit]
+
+    def facts(self) -> list[str]:
+        out: list[str] = []
+        for s, p, o in self._relations:
+            out.append(f"{datalog_const(p)}({datalog_const(s)}, {datalog_const(o)})")
+        for page, ents in self._page_entities.items():
+            for e in ents:
+                out.append(f"mentions({datalog_const(page)}, {datalog_const(e)})")
+        for path in self._pages:
+            parent = self._parent(path)
+            if parent:
+                out.append(f"parent({datalog_const(path)}, {datalog_const(parent)})")
+        return sorted(set(out))
 
     def __len__(self) -> int:
         return len(self._pages)

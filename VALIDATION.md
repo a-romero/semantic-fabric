@@ -27,6 +27,7 @@ with a reason** (shown via `pytest -rs`). A **failure** means a real backend is 
 | Embeddings | `test_bge_m3.py` | `FlagEmbedding` + HF egress | BGE-M3 loads; dim 1024; real dense vectors |
 | Provenance | `test_semantica_backends.py` | `semantica` | real W3C PROV-O export + `verify_chain` tamper-evidence |
 | Reasoning | `test_semantica_backends.py` | `semantica` | Datalog/forward-chaining derives the fact, with an explanation trace |
+| Reason over KG | `test_reasoning_over_graph.py` | none (default) / `semantica` on-env | `/reason` with `over_graph:true` seeds the graph as Datalog facts and derives over the KG itself |
 | Ontology / SHACL | `test_semantica_backends.py` | `semantica`/`pyshacl` | conforming passes, violating fails |
 | Extraction | `test_extraction.py` (`test_llm_extractor_live`) | `litellm` + `EXTRACTION_LIVE=1` + provider creds | typed entities/relations from real text |
 | PDF layout | `test_pdf_parser.py` (`test_pdf_pymupdf_live`) | `PyMuPDF` (`.[pdf]`) | raw PDF bytes → per-page text/tables/figures (parses a PDF synthesized with fitz) |
@@ -75,3 +76,9 @@ Then `GET /decisions/{id}/chain` on the fabric shows the recorded decision's lin
   `valid_until`) and may need updating.
 - **BGE-M3** needs HuggingFace egress on first load (or a local model path /
   `HF_ENDPOINT` mirror).
+- **Reason-over-KG** uses semantica's confirmed `add_fact`/`derive_all`/`query` path
+  (via `RetrievalIndex.graph_facts()`), *not* `DatalogReasoner.load_from_graph` — the
+  latter expects a semantica *ContextGraph*, not an `rdflib.Graph` (introspected via
+  `scripts/inspect_semantica_graph.py`). The RDF store still exposes `rdf_graph()` +
+  `sparql()`; wiring semantica's `SPARQLReasoner` (`execute_query`/`infer_results`)
+  over the store is a possible follow-up (its graph-ingestion API needs one more probe).

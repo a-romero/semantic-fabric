@@ -81,3 +81,8 @@ def test_oxigraph_is_sparql_native(tmp_path):
         (None, rdflib.URIRef("http://semantic-fabric/ex#mentions"), None)
     ))
     assert mentions
+
+    # KG as Datalog atoms (gathered by SPARQL) for reasoning over the graph
+    facts = store.facts()
+    assert "offers(aviva, isa)" in facts
+    assert any(f.startswith("mentions(") for f in facts)

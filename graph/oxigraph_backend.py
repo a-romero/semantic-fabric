@@ -32,7 +32,7 @@ from __future__ import annotations
 
 from urllib.parse import quote
 
-from .store import GraphStore, nearest_parent
+from .store import GraphStore, datalog_const, nearest_parent
 
 EX = "http://semantic-fabric/ex#"
 RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
@@ -253,6 +253,26 @@ class OxigraphGraphStore(GraphStore):
             })
         results.sort(key=lambda r: (r["distance"], r["title"]))
         return results[:limit]
+
+    def facts(self) -> list[str]:
+        """The RDF KG as Datalog atoms, gathered by SPARQL over the graph."""
+        out: list[str] = []
+        for r in self._select(
+            "SELECT ?sn ?p ?on WHERE { ?rel a ex:Relation ; ex:relSubject ?s ;"
+            " ex:relPredicate ?p ; ex:relObject ?o . ?s ex:name ?sn . ?o ex:name ?on }"
+        ):
+            out.append(
+                f"{datalog_const(r['p'])}({datalog_const(r['sn'])}, {datalog_const(r['on'])})"
+            )
+        for r in self._select(
+            "SELECT ?path ?en WHERE { ?pg ex:path ?path ; ex:mentions ?e . ?e ex:name ?en }"
+        ):
+            out.append(f"mentions({datalog_const(r['path'])}, {datalog_const(r['en'])})")
+        for r in self._select(
+            "SELECT ?cp ?pp WHERE { ?c ex:parentPage ?p . ?c ex:path ?cp . ?p ex:path ?pp }"
+        ):
+            out.append(f"parent({datalog_const(r['cp'])}, {datalog_const(r['pp'])})")
+        return sorted(set(out))
 
     # -- semantica interop / raw SPARQL --------------------------------------
     def sparql(self, query: str):

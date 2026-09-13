@@ -143,9 +143,13 @@ def reason(req: ReasonRequest) -> ReasonResponse:
     # Gated so the deterministic layer can be rolled out without destabilizing callers.
     if os.getenv("ENABLE_REASONING", "true").strip().lower() in {"0", "false", "no"}:
         return ReasonResponse(answer="Reasoning is disabled (ENABLE_REASONING=false).")
+    facts = list(req.facts)
+    if req.over_graph:
+        # Reason over the knowledge graph itself: seed the KG as Datalog facts.
+        facts += get_index().graph_facts()
     rreq = ReasoningRequest(
         query=req.query,
-        facts=list(req.facts),
+        facts=facts,
         rules=[Rule(name=r.name, body=list(r.body), head=r.head) for r in req.rules],
     )
     return get_reasoning().reason(rreq)

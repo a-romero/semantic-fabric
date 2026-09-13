@@ -128,6 +128,11 @@ class ReasonRequest(BaseModel):
     facts: list[str] = Field(default_factory=list, description="Known ground atoms")
     rules: list[ReasonRule] = Field(default_factory=list)
     ruleset: str | None = Field(None, description="Named server-side ruleset (optional)")
+    over_graph: bool = Field(
+        False,
+        description="Also seed the reasoner with the knowledge graph as Datalog facts "
+        "(entities/relations/hierarchy), so the query reasons over the KG itself.",
+    )
 
 
 class ReasonResponse(BaseModel):

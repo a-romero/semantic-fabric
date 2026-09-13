@@ -125,6 +125,14 @@ class RetrievalIndex:
     def size(self) -> int:
         return len(self._chunks)
 
+    @property
+    def graph(self) -> GraphStore:
+        return self._graph
+
+    def graph_facts(self) -> list[str]:
+        """KG as Datalog atoms — lets the reasoner reason over the graph itself."""
+        return self._graph.facts()
+
     # -- retrieval --------------------------------------------------------
     def search(self, query: str, section: str | None = None, top_k: int = 5) -> list[EvidenceUnit]:
         if not self._chunks:

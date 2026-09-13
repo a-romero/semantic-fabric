@@ -76,15 +76,22 @@ def build_server():  # noqa: ANN201 - FastMCP type optional at import time
 
     @mcp.tool()
     def reason(query: str, facts: list[str] | None = None,
-               rules: list[dict] | None = None) -> dict:
-        """Deterministic, explainable reasoning. rules: [{name, body:[...], head}]."""
+               rules: list[dict] | None = None, over_graph: bool = False) -> dict:
+        """Deterministic, explainable reasoning. rules: [{name, body:[...], head}].
+
+        over_graph=True also seeds the reasoner with the knowledge graph as Datalog
+        facts, so the query reasons over the KG itself.
+        """
         from reasoning.engine import ReasoningRequest, Rule
 
         from .state import get_reasoning
 
+        seed = list(facts or [])
+        if over_graph:
+            seed += get_index().graph_facts()
         rreq = ReasoningRequest(
             query=query,
-            facts=facts or [],
+            facts=seed,
             rules=[Rule(name=r.get("name", "rule"), body=r.get("body", []), head=r["head"])
                    for r in (rules or [])],
         )

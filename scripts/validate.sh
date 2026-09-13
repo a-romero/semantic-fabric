@@ -66,6 +66,9 @@ cat <<'EOF'
   curl -s -XPOST localhost:8080/search  -d '{"query":"tax efficient savings","top_k":3}' -H 'content-type: application/json'
   curl -s -XPOST localhost:8080/extract -d '{"text":"Aviva offers the Enhanced Pension Annuity."}' -H 'content-type: application/json'
   curl -s -XPOST localhost:8080/reason  -d '{"query":"Insurable(p)","facts":["Policy(p)"],"rules":[{"name":"r","body":["Policy(p)"],"head":"Insurable(p)"}]}' -H 'content-type: application/json'
+  # reason OVER the knowledge graph itself (seeds the KG as Datalog facts; needs an
+  # ingest with EXTRACTION_ON_INGEST=true first so entities/relations exist):
+  curl -s -XPOST localhost:8080/reason  -d '{"query":"offers(aviva, enhanced_pension_annuity)","over_graph":true}' -H 'content-type: application/json'
   DEC=$(curl -s -XPOST localhost:8080/decisions -d '{"scenario":"q","outcome":"a","evidence":["investments/isas/index.md"]}' -H 'content-type: application/json' | python -c 'import sys,json;print(json.load(sys.stdin)["decision_id"])')
   curl -s localhost:8080/decisions/$DEC/chain
 EOF
