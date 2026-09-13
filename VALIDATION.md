@@ -35,7 +35,11 @@ with a reason** (shown via `pytest -rs`). A **failure** means a real backend is 
 
 Provider for extraction is chosen by `EXTRACTION_MODEL`, for captioning by `CAPTION_MODEL`
 (`anthropic/claude-opus-5` | `openai/gpt-4o-mini` | `ollama/llama3.1` | proxy — the
-captioner needs a **vision-capable** model). The persistent graph store is selected by
+captioner needs a **vision-capable** model group reachable on your gateway; if the
+gateway rejects the vision request the live test **skips with the gateway's message**
+rather than failing, since that's an environment limit, not a code defect). Raise
+`CAPTION_MAX_TOKENS` if a reasoning model returns empty output. The persistent graph
+store is selected by
 `GRAPH_STORE=rdf` (SPARQL-native Oxigraph) at `GRAPH_DB_PATH`; the PDF parser by
 `PDF_PARSER=pymupdf` and the captioner by `CAPTION_BACKEND=llm`.
 
