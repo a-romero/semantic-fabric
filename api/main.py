@@ -81,6 +81,18 @@ def get_chunk(ref: str) -> dict:
     return {"ref": ref, "content": f"Stub chunk content for {ref} (Phase 0)."}
 
 
+@app.get("/graph")
+def graph_snapshot() -> dict:
+    # Read-only whole-graph view (pages/entities/relations) for visualization/inspection.
+    snap = get_index().graph_snapshot()
+    snap["counts"] = {
+        "pages": len(snap["pages"]),
+        "entities": len(snap["entities"]),
+        "relations": len(snap["relations"]),
+    }
+    return snap
+
+
 # -- knowledge base (authored + generated namespaces) ------------------------
 @app.get("/kb/{namespace}/tree")
 def list_kb(namespace: str) -> dict:

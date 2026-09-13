@@ -133,6 +133,10 @@ class RetrievalIndex:
         """KG as Datalog atoms — lets the reasoner reason over the graph itself."""
         return self._graph.facts()
 
+    def graph_snapshot(self) -> dict:
+        """Read-only whole-graph view (pages/entities/relations) for visualization."""
+        return self._graph.snapshot()
+
     # -- retrieval --------------------------------------------------------
     def search(self, query: str, section: str | None = None, top_k: int = 5) -> list[EvidenceUnit]:
         if not self._chunks:

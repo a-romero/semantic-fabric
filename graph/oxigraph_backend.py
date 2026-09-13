@@ -274,6 +274,48 @@ class OxigraphGraphStore(GraphStore):
             out.append(f"parent({datalog_const(r['cp'])}, {datalog_const(r['pp'])})")
         return sorted(set(out))
 
+    def snapshot(self) -> dict:
+        """Whole-graph view gathered by SPARQL: {pages, entities, relations}."""
+        pages = []
+        for r in self._select(
+            "SELECT ?path ?title WHERE { ?pg ex:path ?path ; rdfs:label ?title }"
+        ):
+            path = r["path"]
+            par = self._select(
+                f"SELECT ?pp WHERE {{ ?c ex:path '{_esc(path)}' ; ex:parentPage ?p ."
+                f" ?p ex:path ?pp }}"
+            )
+            topics = [t["t"] for t in self._select(
+                f"SELECT ?t WHERE {{ ?pg ex:path '{_esc(path)}' ; ex:topic ?t }}"
+            )]
+            sect = self._select(
+                f"SELECT ?s WHERE {{ ?pg ex:path '{_esc(path)}' ; ex:section ?s }}"
+            )
+            pages.append({
+                "path": path, "title": r["title"],
+                "parent": par[0]["pp"] if par else None,
+                "topics": sorted(topics), "section": sect[0]["s"] if sect else "",
+            })
+        entities = []
+        for r in self._select(
+            "SELECT ?n ?t WHERE { ?e a ex:Entity ; ex:name ?n . OPTIONAL { ?e ex:etype ?t } }"
+        ):
+            epages = [m["path"] for m in self._select(
+                f"SELECT ?path WHERE {{ ?e ex:name '{_esc(r['n'])}' . ?pg ex:mentions ?e ;"
+                f" ex:path ?path }}"
+            )]
+            entities.append({"name": r["n"], "type": r.get("t") or "Unknown",
+                             "pages": sorted(set(epages))})
+        relations = [
+            {"subject": r["sn"], "predicate": r["p"], "object": r["on"]}
+            for r in self._select(
+                "SELECT ?sn ?p ?on WHERE { ?rel a ex:Relation ; ex:relSubject ?s ;"
+                " ex:relPredicate ?p ; ex:relObject ?o . ?s ex:name ?sn . ?o ex:name ?on }"
+            )
+        ]
+        return {"pages": pages, "entities": sorted(entities, key=lambda e: e["name"]),
+                "relations": relations}
+
     # -- semantica interop / raw SPARQL --------------------------------------
     def sparql(self, query: str):
         """Run an arbitrary SPARQL query against the RDF graph."""

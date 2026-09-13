@@ -55,6 +55,10 @@ class GraphStore(Protocol):
         """The knowledge graph as Datalog atoms for reasoning over the KG itself."""
         ...
 
+    def snapshot(self) -> dict:
+        """A read-only view of the whole graph: {pages, entities, relations}."""
+        ...
+
 
 def _norm_topics(topics: list[str]) -> set[str]:
     return {t.strip().lower() for t in topics if t and t.strip()}
@@ -236,6 +240,23 @@ class InMemoryGraphStore:
             if parent:
                 out.append(f"parent({datalog_const(path)}, {datalog_const(parent)})")
         return sorted(set(out))
+
+    def snapshot(self) -> dict:
+        pages = [
+            {"path": p, "title": m["title"], "parent": self._parent(p),
+             "topics": sorted(m["topics"]), "section": m["section"]}
+            for p, m in self._pages.items()
+        ]
+        entities = [
+            {"name": n, "type": self._entity_types.get(n, "Unknown"),
+             "pages": sorted(self._entity_pages.get(n, set()))}
+            for n in sorted(self._entity_types)
+        ]
+        relations = [
+            {"subject": s, "predicate": p, "object": o}
+            for (s, p, o) in sorted(self._relations)
+        ]
+        return {"pages": pages, "entities": entities, "relations": relations}
 
     def __len__(self) -> int:
         return len(self._pages)

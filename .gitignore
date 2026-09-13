@@ -8,3 +8,7 @@ __pycache__/
 *.log
 dist/
 build/
+
+# demo generated output
+demo/out/
+demo/sample_corpus/reports/
