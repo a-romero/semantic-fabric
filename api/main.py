@@ -38,10 +38,12 @@ from reasoning.engine import ReasoningRequest, Rule
 
 from . import stubs
 from .state import (
+    get_captioner,
     get_extractor,
     get_index,
     get_kb,
     get_object_store,
+    get_pdf_parser,
     get_provenance,
     get_reasoning,
     get_validator,
@@ -111,7 +113,9 @@ def ingest(req: IngestRequest) -> IngestJob:
     if req.kind == "pdf_batch":
         try:
             stats = ingest_pdf_batch(
-                get_index(), get_kb(), get_object_store(), req, extractor=_ingest_extractor()
+                get_index(), get_kb(), get_object_store(), req,
+                captioner=get_captioner(), extractor=_ingest_extractor(),
+                parser=get_pdf_parser(),
             )
         except (ValueError, KeyError) as exc:
             return IngestJob(job_id="ingest-error", status="failed", detail=str(exc))

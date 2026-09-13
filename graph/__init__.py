@@ -1,9 +1,10 @@
 """Context Graph for GraphRAG expansion (Phase 1: page graph).
 
-Phase 1 builds a page graph at ingest from the path hierarchy and frontmatter topics
-and exposes ``expand(seed, hops)``. Entity/relation extraction, the ontology
-(OWL/SHACL/SKOS), and a persistent LPG (Kuzu) / RDF (Oxigraph) backend arrive with
-later phases. Public surface:
+The page graph is built at ingest from the path hierarchy and frontmatter topics and
+enriched with extracted entities/relations; ``expand(seed, hops)`` traverses it. The
+in-memory store is the dependency-free default; persistent LPG (Kuzu, ``GRAPH_STORE=lpg``)
+and RDF (Oxigraph, ``GRAPH_STORE=rdf``) backends live in ``kuzu_backend`` /
+``oxigraph_backend`` behind the ``.[graph]`` extra. Public surface:
 
     build_graph_store(kind) -> GraphStore
     GraphStore.add_page(...) / .expand(seed, hops, rel_types, limit)

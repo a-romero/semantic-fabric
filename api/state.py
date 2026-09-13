@@ -12,6 +12,8 @@ import os
 
 from extraction.extractor import Extractor, build_extractor
 from ingest.object_store import InMemoryObjectStore, ObjectStore
+from ingest.pdf_parser import PdfParser, build_pdf_parser
+from ingest.vlm import Captioner, build_captioner
 from kb.store import KBStore
 from ontology.validator import OntologyValidator, build_ontology_validator
 from provenance.store import ProvenanceStore, build_provenance_store
@@ -25,6 +27,8 @@ _provenance: ProvenanceStore | None = None
 _reasoning: ReasoningEngine | None = None
 _validator: OntologyValidator | None = None
 _extractor: Extractor | None = None
+_captioner: Captioner | None = None
+_pdf_parser: PdfParser | None = None
 
 
 def get_index() -> RetrievalIndex:
@@ -109,3 +113,27 @@ def get_extractor() -> Extractor:
 def set_extractor(extractor: Extractor) -> None:
     global _extractor
     _extractor = extractor
+
+
+def get_captioner() -> Captioner:
+    global _captioner
+    if _captioner is None:
+        _captioner = build_captioner(os.getenv("CAPTION_BACKEND"))
+    return _captioner
+
+
+def set_captioner(captioner: Captioner) -> None:
+    global _captioner
+    _captioner = captioner
+
+
+def get_pdf_parser() -> PdfParser:
+    global _pdf_parser
+    if _pdf_parser is None:
+        _pdf_parser = build_pdf_parser(os.getenv("PDF_PARSER"))
+    return _pdf_parser
+
+
+def set_pdf_parser(parser: PdfParser) -> None:
+    global _pdf_parser
+    _pdf_parser = parser

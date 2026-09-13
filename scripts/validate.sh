@@ -15,9 +15,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-echo "== 1/3 install (client + dev + prod + semantica + llm) =="
+echo "== 1/3 install (client + dev + prod + semantica + llm + pdf + graph) =="
 pip install -q -e ./client
-pip install -q -e ".[dev,prod,semantica,llm]" || {
+pip install -q -e ".[dev,prod,semantica,llm,pdf,graph]" || {
   echo "!! full extras install failed; install what your env supports and re-run"; }
 
 # Backend selectors so the opt-in tests light up.
@@ -28,13 +28,18 @@ export REASONING_BACKEND="${REASONING_BACKEND:-semantica}"
 export ONTOLOGY_VALIDATOR="${ONTOLOGY_VALIDATOR:-shacl}"
 export EXTRACTION_BACKEND="${EXTRACTION_BACKEND:-llm}"
 export EXTRACTION_MODEL="${EXTRACTION_MODEL:-anthropic/claude-opus-5}"
+export PDF_PARSER="${PDF_PARSER:-pymupdf}"             # real layout parsing (PyMuPDF)
+export CAPTION_BACKEND="${CAPTION_BACKEND:-llm}"       # VLM figure captioning (LiteLLM)
+export CAPTION_MODEL="${CAPTION_MODEL:-openai/gpt-4o-mini}"
 
-# Enable the live LLM extraction test only if a credential is visible.
+# Enable the live LLM tests (extraction + VLM captioning) only if a credential is visible.
 if [ -n "${ANTHROPIC_API_KEY:-}" ] || [ -n "${OPENAI_API_KEY:-}" ] || [ -n "${LLM_API_BASE:-}" ]; then
   export EXTRACTION_LIVE=1
+  export CAPTION_LIVE=1
   echo "-- live LLM extraction: ENABLED (EXTRACTION_MODEL=$EXTRACTION_MODEL)"
+  echo "-- live VLM captioning: ENABLED (CAPTION_MODEL=$CAPTION_MODEL — needs a VISION model)"
 else
-  echo "-- live LLM extraction: skipped (set ANTHROPIC_API_KEY / OPENAI_API_KEY / LLM_API_BASE)"
+  echo "-- live LLM extraction + VLM captioning: skipped (set ANTHROPIC_API_KEY / OPENAI_API_KEY / LLM_API_BASE)"
 fi
 
 echo "== 2/3 full test suite incl. opt-in backend tests =="
@@ -43,6 +48,9 @@ PYTHONPATH=client:. pytest -q -rs \
   tests/test_bge_m3.py \
   tests/test_semantica_backends.py \
   tests/test_extraction.py \
+  tests/test_pdf_parser.py \
+  tests/test_captioner.py \
+  tests/test_graph_persistence.py \
   tests/     # the rest (defaults) too, for a clean full run
 
 echo

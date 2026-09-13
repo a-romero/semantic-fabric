@@ -39,6 +39,8 @@ def fresh_index():
     """Reset the API's shared stores to clean in-memory instances per test."""
     from extraction.extractor import NullExtractor
     from ingest.object_store import InMemoryObjectStore
+    from ingest.pdf_parser import NullPdfParser
+    from ingest.vlm import NullCaptioner
     from kb.store import KBStore
     from ontology.validator import SimpleConstraintValidator
     from provenance.store import InMemoryProvenanceStore
@@ -51,6 +53,8 @@ def fresh_index():
     state.set_reasoning(SimpleForwardChainer())
     state.set_validator(SimpleConstraintValidator())
     state.set_extractor(NullExtractor())
+    state.set_captioner(NullCaptioner())
+    state.set_pdf_parser(NullPdfParser())
     yield
 
 

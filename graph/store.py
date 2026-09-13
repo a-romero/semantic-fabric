@@ -204,11 +204,27 @@ class InMemoryGraphStore:
 def build_graph_store(kind: str | None) -> GraphStore:
     """Factory from a GRAPH_STORE value. 'memory' (default) is dependency-free.
 
-    'lpg' (Kuzu) and 'rdf' (Oxigraph) backends are wired with the real-backend and
-    reasoning phases respectively; until then they fall back to in-memory.
+    'lpg' selects the persistent Kuzu backend and 'rdf' the persistent Oxigraph
+    backend (both ``.[graph]`` extra), each durable at ``GRAPH_DB_PATH``. Any of them
+    falls back to in-memory if the native library is not installed, so the default
+    install and CI stay dependency-free.
     """
+    import os
+
     choice = (kind or "memory").strip().lower()
-    if choice in {"memory", "inmemory", "in_memory"}:
-        return InMemoryGraphStore()
-    # lpg/rdf backends not yet wired; in-memory keeps behaviour correct meanwhile.
+    db_path = os.getenv("GRAPH_DB_PATH")
+    if choice in {"lpg", "kuzu"}:
+        try:
+            from .kuzu_backend import KuzuGraphStore
+
+            return KuzuGraphStore(db_path or "./graph-kuzu")
+        except Exception:
+            return InMemoryGraphStore()
+    if choice in {"rdf", "oxigraph"}:
+        try:
+            from .oxigraph_backend import OxigraphGraphStore
+
+            return OxigraphGraphStore(db_path or "./graph-oxigraph")
+        except Exception:
+            return InMemoryGraphStore()
     return InMemoryGraphStore()

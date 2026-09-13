@@ -19,8 +19,12 @@ PDF library or vision model (the dependency-free path):
              "figures": [{"caption": "Revenue chart", "image_b64": "...",
                           "bbox": "88,204,512,470"}]}]}]}}
 
-A real layout parser (PyMuPDF/pdfplumber) that produces this structure from raw PDF
-bytes is the pluggable optional layer; it does not change anything below.
+A document may instead carry raw PDF bytes as ``pdf_b64`` (and no ``pages``); a
+``PdfParser`` (the ``.[pdf]`` PyMuPDF backend, or an injected one) explodes it into the
+same page structure before the pipeline below runs, so nothing downstream changes:
+
+    {"kind": "pdf_batch", "payload": {"documents": [
+        {"doc_id": "report-q3", "title": "Q3 Report", "pdf_b64": "<base64 PDF bytes>"}]}}
 """
 
 from __future__ import annotations
@@ -32,6 +36,7 @@ from retrieval.chunking import MAX_CHARS, Chunk, _split_by_length
 from retrieval.index import RetrievalIndex
 
 from .object_store import ObjectStore, decode_b64
+from .pdf_parser import NullPdfParser, PdfParser
 from .vlm import Captioner, NullCaptioner
 
 
@@ -49,9 +54,11 @@ def ingest_pdf_batch(
     req: IngestRequest,
     captioner: Captioner | None = None,
     extractor=None,
+    parser: PdfParser | None = None,
 ) -> dict:
-    """Ingest a pre-parsed pdf_batch. Returns counts for the job detail."""
+    """Ingest a pdf_batch (pre-parsed pages, or raw ``pdf_b64``). Returns job counts."""
     captioner = captioner or NullCaptioner()
+    parser = parser or NullPdfParser()
     docs = req.payload.get("documents") or []
     if not isinstance(docs, list):
         raise ValueError("payload.documents must be a list")
@@ -59,6 +66,13 @@ def ingest_pdf_batch(
     n_chunks = n_figures = n_tables = n_generated = 0
 
     for doc in docs:
+        # Raw-bytes path: parse the PDF into the same page structure first.
+        if not doc.get("pages") and doc.get("pdf_b64"):
+            parsed = parser.parse(
+                decode_b64(doc["pdf_b64"]), doc_id=doc["doc_id"], title=doc.get("title"),
+            )
+            doc = {**doc, "pages": parsed.get("pages") or [],
+                   "title": doc.get("title") or parsed.get("title")}
         doc_id = doc["doc_id"]
         doc_title = str(doc.get("title") or doc_id)
         doc_path = f"{doc_id}.pdf"

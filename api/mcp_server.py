@@ -15,7 +15,14 @@ from ingest.markdown import ingest_markdown_tree
 from ingest.pdf import ingest_pdf_batch
 
 from . import stubs
-from .state import get_index, get_kb, get_object_store, get_provenance
+from .state import (
+    get_captioner,
+    get_index,
+    get_kb,
+    get_object_store,
+    get_pdf_parser,
+    get_provenance,
+)
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -60,7 +67,10 @@ def build_server():  # noqa: ANN201 - FastMCP type optional at import time
             added = ingest_markdown_tree(get_index(), get_kb(), req)
             return {"job_id": f"md-{added}", "status": "done", "detail": f"ingested {added} chunks"}
         if req.kind == "pdf_batch":
-            stats = ingest_pdf_batch(get_index(), get_kb(), get_object_store(), req)
+            stats = ingest_pdf_batch(
+                get_index(), get_kb(), get_object_store(), req,
+                captioner=get_captioner(), parser=get_pdf_parser(),
+            )
             return {"job_id": f"pdf-{stats['docs']}", "status": "done", "detail": str(stats)}
         return stubs.stub_ingest_job().model_dump()
 
