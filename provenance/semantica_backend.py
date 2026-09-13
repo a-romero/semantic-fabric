@@ -14,9 +14,22 @@ Adapter surface preserved for the rest of the service:
 
 from __future__ import annotations
 
+import urllib.parse
 from typing import Any
 
 from fabric_client.models import Decision
+
+# rdflib rejects a URIRef containing whitespace or any of <>"{}|\^` when serializing
+# to Turtle. semantica mints URIRefs from ids/sources, so anything we pass that may
+# carry those (free-text scenarios, relationship ids) must be percent-encoded first.
+_URI_UNSAFE = set(' <>"{}|\\^`')
+
+
+def _uri_safe(s: str) -> str:
+    s = str(s)
+    if any(c in _URI_UNSAFE for c in s):
+        return urllib.parse.quote(s, safe="")
+    return s
 
 
 class SemanticaProvenanceStore:
@@ -40,8 +53,16 @@ class SemanticaProvenanceStore:
     # -- entities / derivation -------------------------------------------------
 
     def _track_derivation(self, child: str, parent: str) -> None:
-        """Record ``child prov:wasDerivedFrom parent`` as a tracked relationship."""
-        rel_id = f"{child}<-{parent}"
+        """Record ``child prov:wasDerivedFrom parent`` as a tracked relationship.
+
+        semantica mints a URIRef from ``relationship_id``, so it must be URI-safe:
+        percent-encode the endpoints (raw ids may carry ``<``, ``#`` etc. that break
+        Turtle serialization) and join with a legal separator.
+        """
+        rel_id = (
+            f"{urllib.parse.quote(str(child), safe='')}"
+            f"__derivedFrom__{urllib.parse.quote(str(parent), safe='')}"
+        )
         try:
             self._pm.track_relationship(
                 rel_id, parent,
@@ -61,7 +82,7 @@ class SemanticaProvenanceStore:
     ) -> str:
         meta = dict(attrs or {})
         meta.setdefault("kind", kind)
-        source = str(meta.get("source_id", entity_id))
+        source = _uri_safe(meta.get("source_id", entity_id))
         self._pm.track_entity(entity_id, source, metadata=meta)
         for parent in derived_from or []:
             self._track_derivation(entity_id, parent)
@@ -71,7 +92,7 @@ class SemanticaProvenanceStore:
         self._decision_seq += 1
         decision_id = f"decision-{self._decision_seq}"
         self._pm.track_entity(
-            decision_id, decision.scenario or decision_id,
+            decision_id, _uri_safe(decision.scenario or decision_id),
             metadata={
                 "kind": "decision",
                 "scenario": decision.scenario,
