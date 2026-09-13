@@ -79,6 +79,10 @@ Then `GET /decisions/{id}/chain` on the fabric shows the recorded decision's lin
 - **Reason-over-KG** uses semantica's confirmed `add_fact`/`derive_all`/`query` path
   (via `RetrievalIndex.graph_facts()`), *not* `DatalogReasoner.load_from_graph` — the
   latter expects a semantica *ContextGraph*, not an `rdflib.Graph` (introspected via
-  `scripts/inspect_semantica_graph.py`). The RDF store still exposes `rdf_graph()` +
-  `sparql()`; wiring semantica's `SPARQLReasoner` (`execute_query`/`infer_results`)
-  over the store is a possible follow-up (its graph-ingestion API needs one more probe).
+  `scripts/inspect_semantica_graph.py`).
+- **semantica's `SPARQLReasoner` is an unimplemented stub in 0.6.8**: `execute_query()`
+  raises `NotImplementedError` ("no triplet-store execution path exists yet"), and the
+  constructor doesn't accept a graph. So SPARQL over the KG runs through **our own
+  Oxigraph store** (`OxigraphGraphStore.sparql()`), which is a real, working SPARQL
+  engine — there is nothing to gain by wiring semantica's SPARQLReasoner unless/until a
+  later release implements it. (Confirmed by `scripts/inspect_semantica_graph.py`.)
