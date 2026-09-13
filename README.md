@@ -23,8 +23,9 @@ skilled-agent's `docs/SEMANTICA_SEPARATION_DESIGN.md` and
 > extraction via structured outputs (schema-validated). Runs on pure-Python defaults
 > out of the box; `.[prod]` swaps in Qdrant + BGE-M3, `.[semantica]` swaps in real W3C
 > PROV-O provenance, Datalog reasoning, and pyshacl SHACL, and `.[llm]` enables the
-> Claude extractor (see ADR 0001). A real PDF layout parser and VLM captioner, and
-> wiring extraction into ingestion to enrich the graph, remain the pluggable next steps.
+> provider-agnostic extractor (Anthropic / OpenAI / Ollama / LiteLLM proxy — see ADR
+> 0001). A real PDF layout parser and VLM captioner, and wiring extraction into
+> ingestion to enrich the graph, remain the pluggable next steps.
 
 ## The boundary
 
@@ -92,6 +93,34 @@ make run
   host with HF egress (or a pre-provisioned model / `HF_ENDPOINT` mirror / a local model
   path as `EMBEDDING_MODEL`). `tests/test_bge_m3.py` skips gracefully where the model
   isn't reachable.
+
+### LLM-backed extraction (provider-agnostic)
+
+`/extract` runs a no-op by default; enable a real extractor with the `.[llm]` extra
+(LiteLLM). The provider is chosen entirely by the model string — one implementation,
+any provider:
+
+```bash
+pip install -e ".[llm]"          # litellm
+export EXTRACTION_BACKEND=llm
+# pick ONE provider via EXTRACTION_MODEL (+ that provider's credential):
+export EXTRACTION_MODEL=anthropic/claude-opus-5      # ANTHROPIC_API_KEY
+# export EXTRACTION_MODEL=openai/gpt-4o-mini         # OPENAI_API_KEY
+# export EXTRACTION_MODEL=ollama/llama3.1            # LLM_API_BASE=http://localhost:11434
+# export EXTRACTION_MODEL=my-proxy-model             # LLM_API_BASE=<litellm proxy>, LLM_API_KEY=...
+```
+
+| Provider | `EXTRACTION_MODEL` | Credentials |
+|---|---|---|
+| Anthropic (default) | `anthropic/claude-opus-5` | `ANTHROPIC_API_KEY` |
+| OpenAI | `openai/gpt-4o-mini` | `OPENAI_API_KEY` |
+| Ollama (local) | `ollama/llama3.1` | `LLM_API_BASE` (Ollama URL) |
+| LiteLLM proxy | your proxy model name | `LLM_API_BASE`, `LLM_API_KEY` |
+
+Output is always validated against the `Extraction` schema regardless of provider, so
+weaker native structured-output support (e.g. Ollama) still yields typed, validated
+entities/relations. `tests/test_extraction.py` covers the parsing/validation offline;
+set `EXTRACTION_LIVE=1` (with `litellm` + provider creds) to run a live call.
 
 ## API surface
 

@@ -1,8 +1,10 @@
-"""Phase 3 fast-follow: LLM-backed extraction tests.
+"""Phase 3 fast-follow: LLM-backed extraction tests (provider-agnostic).
 
-The default backend (NullExtractor) is dependency-free and used by CI. The Claude
-backend is exercised only when the .[llm] extra is installed AND an API credential is
-present — otherwise skipped, so CI stays offline and free.
+The default backend (NullExtractor) is dependency-free and used by CI. The LLMExtractor
+(LiteLLM) is exercised only when litellm is installed AND EXTRACTION_LIVE is set (a
+credential for the chosen EXTRACTION_MODEL's provider must be present) — otherwise
+skipped, so CI stays offline and free. The JSON-parsing/validation path is tested
+offline without any network call.
 """
 
 import os
@@ -12,7 +14,7 @@ from fabric_client.models import Extraction
 from fastapi.testclient import TestClient
 
 from api.main import app
-from extraction.extractor import NullExtractor, build_extractor
+from extraction.extractor import NullExtractor, _parse_extraction, build_extractor
 
 client = TestClient(app)
 
@@ -26,8 +28,31 @@ def test_null_extractor_returns_empty():
 
 def test_build_extractor_defaults_to_null():
     assert build_extractor(None).name == "null"
-    # Asking for claude without the SDK/creds falls back safely to null.
-    assert build_extractor("claude").name in {"claude", "null"}
+    # Any provider alias maps to the one LiteLLM extractor; falls back to null if litellm absent.
+    for alias in ("llm", "anthropic", "openai", "ollama"):
+        assert build_extractor(alias).name in {"llm", "null"}
+
+
+def test_parse_extraction_validates_against_schema():
+    # plain JSON
+    out = _parse_extraction(
+        '{"entities":[{"name":"ISA","type":"Product"}],'
+        '"relations":[{"subject":"ISA","predicate":"is_a","object":"savings account",'
+        '"confidence":0.9}]}'
+    )
+    assert [e.name for e in out.entities] == ["ISA"]
+    assert out.relations[0].predicate == "is_a"
+
+
+def test_parse_extraction_tolerates_fences_and_prose():
+    messy = 'Here is the graph:\n```json\n{"entities":[{"name":"Aviva","type":"Organization"}],' \
+            '"relations":[]}\n```'
+    out = _parse_extraction(messy)
+    assert out.entities[0].type == "Organization"
+
+
+def test_parse_extraction_bad_output_returns_empty():
+    assert _parse_extraction("sorry, I cannot help with that").entities == []
 
 
 def test_extract_endpoint_shape():
@@ -40,17 +65,17 @@ def test_extract_endpoint_shape():
 
 
 @pytest.mark.skipif(
-    "ANTHROPIC_API_KEY" not in os.environ, reason="no Anthropic credential; live extraction skipped"
+    "EXTRACTION_LIVE" not in os.environ,
+    reason="set EXTRACTION_LIVE=1 (with litellm + provider creds) to run live extraction",
 )
-def test_claude_extractor_live():
-    pytest.importorskip("anthropic")
-    from extraction.extractor import ClaudeExtractor
+def test_llm_extractor_live():
+    pytest.importorskip("litellm")
+    from extraction.extractor import LLMExtractor
 
-    ex = ClaudeExtractor()
+    ex = LLMExtractor()  # provider chosen by EXTRACTION_MODEL
     out = ex.extract(
         "Aviva offers the Enhanced Pension Annuity, which pays a guaranteed income for life.",
         hint="UK insurance & pensions",
     )
     assert isinstance(out, Extraction)
-    # A capable model should find at least the product entity.
     assert out.entities, "expected at least one extracted entity"

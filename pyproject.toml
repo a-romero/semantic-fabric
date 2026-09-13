@@ -21,8 +21,9 @@ prod = ["qdrant-client>=1.9", "FlagEmbedding>=1.2"]
 # Semantic layers adopted per ADR 0001 (provenance / reasoning / ontology).
 # Pinned per the evaluation spike; 0.x churn + bus-factor make drift a real risk.
 semantica = ["semantica==0.6.8"]
-# LLM-backed extraction (typed entities/relations via structured outputs).
-llm = ["anthropic>=1.0"]
+# LLM-backed extraction (typed entities/relations). Provider-agnostic via LiteLLM
+# (Anthropic / OpenAI / Ollama / proxy, chosen by EXTRACTION_MODEL).
+llm = ["litellm>=1.40"]
 dev = ["pytest>=8.0", "httpx>=0.27", "ruff>=0.4"]
 
 [tool.uv.sources]
