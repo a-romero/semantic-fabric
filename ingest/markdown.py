@@ -17,17 +17,20 @@ from kb.store import KBStore
 from retrieval.index import RetrievalIndex
 
 
-def ingest_markdown_tree(index: RetrievalIndex, kb: KBStore, req: IngestRequest) -> int:
+def ingest_markdown_tree(
+    index: RetrievalIndex, kb: KBStore, req: IngestRequest, extractor=None
+) -> int:
     """Ingest a markdown_tree request into the index and mirror pages into the KB.
 
     The pages become retrievable chunks (and graph nodes) via the index, and are also
     stored under the authored/ namespace so GET /kb/authored/<path> can read them.
+    When ``extractor`` is provided, extracted entities/relations enrich the graph.
     Returns chunks added.
     """
     pages = req.payload.get("pages") or []
     if not isinstance(pages, list):
         raise ValueError("payload.pages must be a list of {path, frontmatter, body}")
-    added = index.add_pages(pages, namespace=req.namespace)
+    added = index.add_pages(pages, namespace=req.namespace, extractor=extractor)
     for page in pages:
         kb.put(
             "authored",

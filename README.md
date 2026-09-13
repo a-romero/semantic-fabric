@@ -122,6 +122,13 @@ weaker native structured-output support (e.g. Ollama) still yields typed, valida
 entities/relations. `tests/test_extraction.py` covers the parsing/validation offline;
 set `EXTRACTION_LIVE=1` (with `litellm` + provider creds) to run a live call.
 
+**Feeding the graph.** Set `EXTRACTION_ON_INGEST=true` to run the extractor during
+`/ingest`: extracted entities/relations become graph edges (`shared-entity`,
+`relation:<predicate>`) and the entity names are attached to each page's chunks
+(surfaced as `EvidenceUnit.entities`). `graph_expand` then connects pages through the
+extracted KG — not just frontmatter topics — and accepts an entity name as its seed.
+Off by default (no LLM calls at ingest unless enabled).
+
 ## API surface
 
 | Concern | REST | MCP tool |

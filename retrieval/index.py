@@ -65,15 +65,20 @@ class RetrievalIndex:
         self._chunks: dict[str, Chunk] = {}
 
     # -- ingestion --------------------------------------------------------
-    def add_pages(self, pages: list[dict], namespace: str = "authored") -> int:
-        """Ingest Markdown pages: [{path, frontmatter, body}]. Returns chunk count."""
+    def add_pages(self, pages: list[dict], namespace: str = "authored", extractor=None) -> int:
+        """Ingest Markdown pages: [{path, frontmatter, body}]. Returns chunk count.
+
+        When ``extractor`` is provided (an ``extraction.Extractor``), each page's text is
+        run through it: extracted entities/relations become graph edges and the entity
+        names are attached to that page's chunks (surfaced as EvidenceUnit.entities).
+        """
         new_chunks: list[Chunk] = []
         for page in pages:
             path = page["path"]
             frontmatter = page.get("frontmatter") or {}
             body = page.get("body") or ""
-            new_chunks.extend(
-                chunk_page(namespace=namespace, path=path, frontmatter=frontmatter, body=body)
+            page_chunks = chunk_page(
+                namespace=namespace, path=path, frontmatter=frontmatter, body=body
             )
             # Register the page in the graph (hierarchy + topic edges derived on expand).
             self._graph.add_page(
@@ -83,7 +88,23 @@ class RetrievalIndex:
                 topics=_page_topics(frontmatter),
                 section=path.split("/", 1)[0] if "/" in path else "",
             )
+            if extractor is not None:
+                names = self.apply_extraction(path, extractor.extract(body))
+                for c in page_chunks:
+                    c.entities = names
+            new_chunks.extend(page_chunks)
         return self.add_chunks(new_chunks)
+
+    def apply_extraction(self, page_path: str, extraction) -> list[str]:
+        """Register an Extraction's entities/relations into the graph, linked to a page.
+
+        Returns the extracted entity names (to attach to the page's chunks).
+        """
+        for e in extraction.entities:
+            self._graph.add_entity(e.name, e.type, page_path=page_path)
+        for r in extraction.relations:
+            self._graph.add_relation(r.subject, r.predicate, r.object)
+        return [e.name for e in extraction.entities]
 
     def add_chunks(self, chunks: list[Chunk]) -> int:
         """Embed, index (BM25) and store already-built chunks of any evidence type.
@@ -142,6 +163,7 @@ class RetrievalIndex:
                         locator=chunk.locator,
                         prov_o=prov_o,
                     ),
+                    entities=list(chunk.entities),
                 )
             )
             if len(units) >= top_k:

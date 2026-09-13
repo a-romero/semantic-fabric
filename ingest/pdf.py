@@ -48,6 +48,7 @@ def ingest_pdf_batch(
     object_store: ObjectStore,
     req: IngestRequest,
     captioner: Captioner | None = None,
+    extractor=None,
 ) -> dict:
     """Ingest a pre-parsed pdf_batch. Returns counts for the job detail."""
     captioner = captioner or NullCaptioner()
@@ -68,6 +69,7 @@ def ingest_pdf_batch(
             n = int(page.get("page", 0))
             loc = f"page={n}"
             summary_bits: list[str] = []
+            page_start = len(chunks)  # chunks added below belong to this page
 
             # prose -> pdf_chunk(s)
             for i, piece in enumerate(_split_by_length(page.get("text") or "", MAX_CHARS)):
@@ -130,6 +132,12 @@ def ingest_pdf_batch(
                 )
                 n_figures += 1
                 summary_bits.append(f"Figure: {caption}")
+
+            # LLM extraction over the page prose -> graph entities/relations + chunk links
+            if extractor is not None and page.get("text"):
+                names = index.apply_extraction(doc_path, extractor.extract(page["text"]))
+                for c in chunks[page_start:]:
+                    c.entities = names
 
             # per-page generated summary page
             page_summary = "\n\n".join(summary_bits) or "(no extractable content)"

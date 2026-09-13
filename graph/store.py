@@ -26,6 +26,10 @@ class GraphStore(Protocol):
         self, path: str, title: str, summary: str, topics: list[str], section: str
     ) -> None: ...
 
+    def add_entity(self, name: str, etype: str, page_path: str | None = None) -> None: ...
+
+    def add_relation(self, subject: str, predicate: str, obj: str) -> None: ...
+
     def expand(
         self, seed: str, hops: int = 1, rel_types: list[str] | None = None, limit: int = 10
     ) -> list[dict]:
@@ -42,10 +46,17 @@ class InMemoryGraphStore:
 
     HIERARCHY = "hierarchy"
     TOPIC = "topic"
+    ENTITY = "entity"      # pages sharing an extracted entity
+    RELATION = "relation"  # pages connected through an extracted relation
 
     def __init__(self) -> None:
         # path -> {title, summary, topics: set[str], section}
         self._pages: dict[str, dict] = {}
+        # extracted-KG state (populated when extraction is wired into ingestion)
+        self._page_entities: dict[str, set[str]] = {}   # path -> entity names
+        self._entity_pages: dict[str, set[str]] = {}    # entity name -> paths
+        self._entity_types: dict[str, str] = {}         # entity name -> type
+        self._relations: set[tuple[str, str, str]] = set()  # (subject, predicate, object)
 
     def add_page(
         self, path: str, title: str, summary: str, topics: list[str], section: str
@@ -56,6 +67,34 @@ class InMemoryGraphStore:
             "topics": _norm_topics(topics),
             "section": section,
         }
+
+    # -- extracted knowledge graph (from LLM extraction at ingest) --------
+    def add_entity(self, name: str, etype: str, page_path: str | None = None) -> None:
+        name = name.strip()
+        if not name:
+            return
+        self._entity_types.setdefault(name, etype or "Unknown")
+        if page_path:
+            self._page_entities.setdefault(page_path, set()).add(name)
+            self._entity_pages.setdefault(name, set()).add(page_path)
+
+    def add_relation(self, subject: str, predicate: str, obj: str) -> None:
+        subject, obj = subject.strip(), obj.strip()
+        if not subject or not obj:
+            return
+        self._entity_types.setdefault(subject, "Unknown")
+        self._entity_types.setdefault(obj, "Unknown")
+        self._relations.add((subject, predicate.strip() or "related_to", obj))
+
+    def _related_entities(self, entity: str) -> list[tuple[str, str]]:
+        """Entities directly related to `entity`, with the predicate."""
+        out: list[tuple[str, str]] = []
+        for s, p, o in self._relations:
+            if s == entity:
+                out.append((o, p))
+            elif o == entity:
+                out.append((s, p))
+        return out
 
     # -- edge derivation --------------------------------------------------
     def _parent(self, path: str) -> str | None:
@@ -69,7 +108,9 @@ class InMemoryGraphStore:
         return None
 
     def _edges(self, path: str, rel_types: list[str] | None) -> list[tuple[str, str]]:
-        want = set(rel_types) if rel_types else {self.HIERARCHY, self.TOPIC}
+        want = set(rel_types) if rel_types else {
+            self.HIERARCHY, self.TOPIC, self.ENTITY, self.RELATION
+        }
         edges: list[tuple[str, str]] = []
         if self.HIERARCHY in want:
             parent = self._parent(path)
@@ -87,6 +128,20 @@ class InMemoryGraphStore:
                     shared = mine & meta["topics"]
                     if shared:
                         edges.append((other, f"shared-topic:{sorted(shared)[0]}"))
+        my_entities = self._page_entities.get(path, set())
+        if self.ENTITY in want and my_entities:
+            # pages that share an extracted entity with this page
+            for ent in my_entities:
+                for other in self._entity_pages.get(ent, set()):
+                    if other != path:
+                        edges.append((other, f"shared-entity:{ent}"))
+        if self.RELATION in want and my_entities:
+            # pages reached through an extracted relation on one of this page's entities
+            for ent in my_entities:
+                for related, predicate in self._related_entities(ent):
+                    for other in self._entity_pages.get(related, set()):
+                        if other != path:
+                            edges.append((other, f"relation:{predicate}"))
         return edges
 
     # -- traversal --------------------------------------------------------
@@ -95,6 +150,9 @@ class InMemoryGraphStore:
         seed = seed.strip()
         if seed in self._pages:
             return {seed: (0, "seed")}
+        # seed as an extracted entity name -> pages mentioning it (distance 1)
+        if seed in self._entity_pages:
+            return {p: (1, f"entity:{seed}") for p in self._entity_pages[seed]}
         token = seed.lower().removeprefix("topic:")
         frontier: dict[str, tuple[int, str]] = {}
         for path, meta in self._pages.items():

@@ -92,18 +92,27 @@ def read_page(namespace: str, path: str) -> KBPage:
 
 
 # -- ingestion ---------------------------------------------------------------
+def _ingest_extractor():
+    """The extractor to enrich the graph at ingest, or None unless EXTRACTION_ON_INGEST."""
+    if os.getenv("EXTRACTION_ON_INGEST", "false").strip().lower() in {"1", "true", "yes"}:
+        return get_extractor()
+    return None
+
+
 @app.post("/ingest", response_model=IngestJob)
 def ingest(req: IngestRequest) -> IngestJob:
     # Push entry point: anyone can POST a source here from anywhere.
     if req.kind == "markdown_tree":
         try:
-            added = ingest_markdown_tree(get_index(), get_kb(), req)
+            added = ingest_markdown_tree(get_index(), get_kb(), req, extractor=_ingest_extractor())
         except ValueError as exc:
             return IngestJob(job_id="ingest-error", status="failed", detail=str(exc))
         return IngestJob(job_id=f"md-{added}", status="done", detail=f"ingested {added} chunks")
     if req.kind == "pdf_batch":
         try:
-            stats = ingest_pdf_batch(get_index(), get_kb(), get_object_store(), req)
+            stats = ingest_pdf_batch(
+                get_index(), get_kb(), get_object_store(), req, extractor=_ingest_extractor()
+            )
         except (ValueError, KeyError) as exc:
             return IngestJob(job_id="ingest-error", status="failed", detail=str(exc))
         return IngestJob(

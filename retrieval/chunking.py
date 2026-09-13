@@ -29,6 +29,7 @@ class Chunk:
     source_id: str | None = None           # doc/page id; defaults to path
     override_locator: str | None = None    # e.g. "page=12;bbox=88,204,512,470"
     image_ref: str | None = None           # object-store ref for a figure
+    entities: list[str] = field(default_factory=list)  # linked graph entity names
 
     @property
     def locator(self) -> str:
