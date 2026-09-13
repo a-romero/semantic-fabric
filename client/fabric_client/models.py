@@ -144,6 +144,43 @@ class Decision(BaseModel):
     recorded_time: str | None = None
 
 
+class ExtractedEntity(BaseModel):
+    name: str = Field(..., description="Canonical surface form of the entity")
+    type: str = Field(..., description="Entity type, e.g. Product, Organization, Policy, Term")
+
+
+class ExtractedRelation(BaseModel):
+    subject: str = Field(..., description="Entity name (subject)")
+    predicate: str = Field(..., description="Typed relation, snake_case, e.g. covers, offered_by")
+    object: str = Field(..., description="Entity name or literal (object)")
+    confidence: float = Field(1.0, description="Extractor confidence 0..1")
+
+
+class Extraction(BaseModel):
+    """Typed entities + relations extracted from a piece of text.
+
+    Doubles as the LLM structured-output schema (client.messages.parse output_format),
+    so the wire contract and the extraction schema are one definition.
+    """
+
+    entities: list[ExtractedEntity] = Field(default_factory=list)
+    relations: list[ExtractedRelation] = Field(default_factory=list)
+
+
+class ExtractRequest(BaseModel):
+    text: str
+    hint: str | None = Field(
+        None, description="Optional domain hint, e.g. 'UK insurance & pensions'"
+    )
+
+
+class ExtractResponse(BaseModel):
+    entities: list[ExtractedEntity] = Field(default_factory=list)
+    relations: list[ExtractedRelation] = Field(default_factory=list)
+    backend: str = "null"
+    model: str | None = None
+
+
 class OntologyConstraint(BaseModel):
     """A declarative constraint over entities of a class (compiled to SHACL server-side)."""
 

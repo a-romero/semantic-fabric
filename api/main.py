@@ -1,9 +1,10 @@
 """semantic-fabric REST API — the network boundary.
 
-Every route validates against the real wire contract (fabric_client.models).
-Phase 1 wires /ingest (markdown_tree) and /search to real hybrid retrieval over the
-ingested authored KB; graph expansion, reasoning, decisions, and the generated/ KB
-namespace remain stubs until their phases land. Route signatures never change.
+Every route validates against the real wire contract (fabric_client.models). Real and
+wired: /search + /graph/expand (retrieval + GraphRAG), /ingest (markdown_tree,
+pdf_batch), the authored/ + generated/ KB namespaces, /reason, /validate (SHACL gate),
+/extract (LLM-backed), and /decisions (+ lineage). Each has a dependency-free default
+and an optional backend behind an extra. Route signatures never change.
 
 Run: uvicorn api.main:app --reload --port 8080
 """
@@ -15,6 +16,8 @@ import os
 from fabric_client.models import (
     CONTRACT_VERSION,
     Decision,
+    ExtractRequest,
+    ExtractResponse,
     GraphExpandRequest,
     IngestJob,
     IngestRequest,
@@ -35,6 +38,7 @@ from reasoning.engine import ReasoningRequest, Rule
 
 from . import stubs
 from .state import (
+    get_extractor,
     get_index,
     get_kb,
     get_object_store,
@@ -132,6 +136,20 @@ def reason(req: ReasonRequest) -> ReasonResponse:
         rules=[Rule(name=r.name, body=list(r.body), head=r.head) for r in req.rules],
     )
     return get_reasoning().reason(rreq)
+
+
+@app.post("/extract", response_model=ExtractResponse)
+def extract(req: ExtractRequest) -> ExtractResponse:
+    # LLM-backed typed entity/relation extraction (structured outputs on the Claude
+    # backend; no-op on the default). Feeds the graph when wired into ingestion.
+    extractor = get_extractor()
+    result = extractor.extract(req.text, hint=req.hint)
+    return ExtractResponse(
+        entities=result.entities,
+        relations=result.relations,
+        backend=extractor.name,
+        model=extractor.model,
+    )
 
 
 @app.post("/validate", response_model=ValidateResponse)

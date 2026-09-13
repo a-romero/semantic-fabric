@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 
+from extraction.extractor import Extractor, build_extractor
 from ingest.object_store import InMemoryObjectStore, ObjectStore
 from kb.store import KBStore
 from ontology.validator import OntologyValidator, build_ontology_validator
@@ -23,6 +24,7 @@ _object_store: ObjectStore | None = None
 _provenance: ProvenanceStore | None = None
 _reasoning: ReasoningEngine | None = None
 _validator: OntologyValidator | None = None
+_extractor: Extractor | None = None
 
 
 def get_index() -> RetrievalIndex:
@@ -95,3 +97,15 @@ def get_validator() -> OntologyValidator:
 def set_validator(validator: OntologyValidator) -> None:
     global _validator
     _validator = validator
+
+
+def get_extractor() -> Extractor:
+    global _extractor
+    if _extractor is None:
+        _extractor = build_extractor(os.getenv("EXTRACTION_BACKEND"))
+    return _extractor
+
+
+def set_extractor(extractor: Extractor) -> None:
+    global _extractor
+    _extractor = extractor

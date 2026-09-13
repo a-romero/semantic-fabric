@@ -37,6 +37,7 @@ SAMPLE_PAGES = [
 @pytest.fixture(autouse=True)
 def fresh_index():
     """Reset the API's shared stores to clean in-memory instances per test."""
+    from extraction.extractor import NullExtractor
     from ingest.object_store import InMemoryObjectStore
     from kb.store import KBStore
     from ontology.validator import SimpleConstraintValidator
@@ -49,6 +50,7 @@ def fresh_index():
     state.set_provenance(InMemoryProvenanceStore())
     state.set_reasoning(SimpleForwardChainer())
     state.set_validator(SimpleConstraintValidator())
+    state.set_extractor(NullExtractor())
     yield
 
 

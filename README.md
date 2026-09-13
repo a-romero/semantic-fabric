@@ -19,10 +19,12 @@ skilled-agent's `docs/SEMANTICA_SEPARATION_DESIGN.md` and
 > for transitive lineage), **`/reason`** (deterministic, explainable inference with a
 > rule trace), and **`/validate`** — the SHACL policy gate: check entity data against
 > declared constraints (required properties, min values, allowed values) before an
-> answer leaves the plane. Runs on pure-Python defaults out of the box; `.[prod]` swaps
-> in Qdrant + BGE-M3, `.[semantica]` swaps in real W3C PROV-O provenance, Datalog
-> reasoning, and pyshacl SHACL (see ADR 0001). A real PDF layout parser, VLM captioner,
-> and LLM-backed extraction remain pluggable layers.
+> answer leaves the plane, and **`/extract`** — LLM-backed typed entity/relation
+> extraction via structured outputs (schema-validated). Runs on pure-Python defaults
+> out of the box; `.[prod]` swaps in Qdrant + BGE-M3, `.[semantica]` swaps in real W3C
+> PROV-O provenance, Datalog reasoning, and pyshacl SHACL, and `.[llm]` enables the
+> Claude extractor (see ADR 0001). A real PDF layout parser and VLM captioner, and
+> wiring extraction into ingestion to enrich the graph, remain the pluggable next steps.
 
 ## The boundary
 

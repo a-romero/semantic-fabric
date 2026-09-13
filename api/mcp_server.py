@@ -81,6 +81,20 @@ def build_server():  # noqa: ANN201 - FastMCP type optional at import time
         return get_reasoning().reason(rreq).model_dump()
 
     @mcp.tool()
+    def extract(text: str, hint: str = "") -> dict:
+        """LLM-backed typed entity/relation extraction from text (structured outputs)."""
+        from .state import get_extractor
+
+        ex = get_extractor()
+        result = ex.extract(text, hint=hint or None)
+        return {
+            "entities": [e.model_dump() for e in result.entities],
+            "relations": [r.model_dump() for r in result.relations],
+            "backend": ex.name,
+            "model": ex.model,
+        }
+
+    @mcp.tool()
     def validate(entities: list[dict], constraints: list[dict]) -> dict:
         """SHACL policy gate: check entities against constraints. Returns conforms + violations."""
         from ontology.validator import Constraint, ValidationRequest
