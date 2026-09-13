@@ -28,7 +28,7 @@ from ingest.markdown import ingest_markdown_tree
 from ingest.pdf import ingest_pdf_batch
 
 from . import stubs
-from .state import get_index, get_kb, get_object_store
+from .state import get_index, get_kb, get_object_store, get_provenance
 
 app = FastAPI(
     title="semantic-fabric",
@@ -115,9 +115,11 @@ def reason(req: ReasonRequest) -> ReasonResponse:
 
 @app.post("/decisions")
 def record_decision(decision: Decision) -> dict:
-    return {"decision_id": "dec-stub", "recorded": True, "scenario": decision.scenario}
+    # Phase 3: persist the decision as a provenance node derived from its evidence.
+    return get_provenance().record_decision(decision)
 
 
 @app.get("/decisions/{decision_id}/chain")
 def decision_chain(decision_id: str) -> dict:
-    return {"decision_id": decision_id, "chain": [], "note": "Phase 0 stub."}
+    # Phase 3: transitive lineage ("why did the agent conclude this, from what?").
+    return get_provenance().trace_chain(decision_id)

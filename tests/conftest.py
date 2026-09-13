@@ -39,10 +39,12 @@ def fresh_index():
     """Reset the API's shared stores to clean in-memory instances per test."""
     from ingest.object_store import InMemoryObjectStore
     from kb.store import KBStore
+    from provenance.store import InMemoryProvenanceStore
 
     state.set_index(RetrievalIndex(HashingEmbedder(), InMemoryVectorStore()))
     state.set_kb(KBStore())
     state.set_object_store(InMemoryObjectStore())
+    state.set_provenance(InMemoryProvenanceStore())
     yield
 
 

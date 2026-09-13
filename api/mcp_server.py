@@ -15,7 +15,7 @@ from ingest.markdown import ingest_markdown_tree
 from ingest.pdf import ingest_pdf_batch
 
 from . import stubs
-from .state import get_index, get_kb, get_object_store
+from .state import get_index, get_kb, get_object_store, get_provenance
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -68,6 +68,15 @@ def build_server():  # noqa: ANN201 - FastMCP type optional at import time
     def reason(query: str) -> dict:
         """Deterministic reasoning over the semantic layer."""
         return stubs.stub_reason(query).model_dump()
+
+    @mcp.tool()
+    def record_decision(scenario: str, outcome: str, evidence: list[str] | None = None) -> dict:
+        """Record an agent decision derived from the evidence it cited (provenance)."""
+        from fabric_client.models import Decision
+
+        return get_provenance().record_decision(
+            Decision(scenario=scenario, outcome=outcome, evidence=evidence or [])
+        )
 
     return mcp
 

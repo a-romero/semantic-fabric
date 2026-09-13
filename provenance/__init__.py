@@ -1,6 +1,18 @@
-"""Provenance + decisions (Phase 3+): W3C PROV-O lineage.
+"""Provenance + decisions (Phase 3): auditable lineage.
 
-Every fact/chunk/caption links to its source (doc, page, bbox, connector URI).
-record_decision() persists agent answers as auditable decision nodes with a causal
-chain, answering "why did the agent say this, and what did we know when?".
+record_decision() persists agent answers as decision nodes derived from the evidence
+they cited; trace_chain() returns the transitive lineage — "why did the agent say
+this, and from what?". The in-memory default adds a tamper-evident hash chain; the
+optional semantica backend emits W3C PROV-O. Public surface:
+
+    build_provenance_store(kind) -> ProvenanceStore
+    ProvenanceStore.record_decision(decision) / .trace_chain(id) / .verify_chain()
 """
+
+from .store import (
+    InMemoryProvenanceStore,
+    ProvenanceStore,
+    build_provenance_store,
+)
+
+__all__ = ["ProvenanceStore", "InMemoryProvenanceStore", "build_provenance_store"]

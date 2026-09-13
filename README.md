@@ -11,16 +11,16 @@ lightweight [`fabric-client`](client/) package. The full rationale lives in
 skilled-agent's `docs/SEMANTICA_SEPARATION_DESIGN.md` and
 `docs/SEMANTICA_INTEGRATION_VISION.md`.
 
-> **Status: Phase 2 (dense sources).** Real and wired: `/search` (hybrid vector +
-> BM25, RRF-fused), `/graph/expand` (GraphRAG over a page graph), `/ingest` for
-> `markdown_tree` **and** `pdf_batch` (prose → pdf_chunk, tables → table_row,
-> figures → object store + chart_caption), and the fabric-owned **`generated/`**
-> namespace (dense-doc summary trees) served via `GET /kb/...` alongside `authored/`.
-> Runs on pure-Python defaults out of the box (hashing embedder + in-memory vectors +
-> in-memory graph/KB/object store); set `VECTOR_STORE=qdrant`,
-> `EMBEDDING_MODEL=BAAI/bge-m3` (install `.[prod]`) for the production backends.
-> Reasoning and decisions remain stubs until Phase 3; a real PDF layout parser and VLM
-> captioner are pluggable optional layers over the pre-parsed `pdf_batch` path.
+> **Status: Phase 3 in progress (provenance + decisions).** Real and wired: `/search`
+> (hybrid vector + BM25, RRF-fused), `/graph/expand` (GraphRAG), `/ingest` for
+> `markdown_tree` **and** `pdf_batch`, the `generated/` + `authored/` KB namespaces,
+> and now **`/decisions`** — each agent answer is recorded as a decision derived from
+> the evidence it cited, with a tamper-evident hash chain, and `GET /decisions/{id}/chain`
+> returns the transitive lineage ("why did the agent conclude this, from what?").
+> Runs on pure-Python defaults out of the box; `.[prod]` swaps in Qdrant + BGE-M3, and
+> `.[semantica]` swaps the provenance backend for real W3C PROV-O (see ADR 0001).
+> Reasoning (`/reason`) and SHACL policy gates are the next Phase 3 steps; a real PDF
+> layout parser, VLM captioner, and LLM-backed extraction remain pluggable layers.
 
 ## The boundary
 

@@ -8,13 +8,17 @@ the Qdrant / object-store backends; these singletons are thin fronts over them.
 
 from __future__ import annotations
 
+import os
+
 from ingest.object_store import InMemoryObjectStore, ObjectStore
 from kb.store import KBStore
+from provenance.store import ProvenanceStore, build_provenance_store
 from retrieval.index import RetrievalIndex, build_index_from_env
 
 _index: RetrievalIndex | None = None
 _kb: KBStore | None = None
 _object_store: ObjectStore | None = None
+_provenance: ProvenanceStore | None = None
 
 
 def get_index() -> RetrievalIndex:
@@ -51,3 +55,15 @@ def get_object_store() -> ObjectStore:
 def set_object_store(store: ObjectStore) -> None:
     global _object_store
     _object_store = store
+
+
+def get_provenance() -> ProvenanceStore:
+    global _provenance
+    if _provenance is None:
+        _provenance = build_provenance_store(os.getenv("PROVENANCE_BACKEND"))
+    return _provenance
+
+
+def set_provenance(store: ProvenanceStore) -> None:
+    global _provenance
+    _provenance = store
