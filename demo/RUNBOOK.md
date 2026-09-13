@@ -101,6 +101,28 @@ PYTHONPATH=client:. python demo/run_demo.py \
 > The report is a **local file** — your data never leaves your machine. Nothing is
 > published anywhere.
 
+### Ask again without re-ingesting
+
+Ingesting and asking are **separate** — once documents are in the service you can ask as
+many questions as you like without re-ingesting. Pass `--no-ingest`:
+
+```bash
+PYTHONPATH=client:. python demo/run_demo.py --no-ingest \
+  --question "which products are tax-advantaged?"
+```
+
+Or hit the API directly (the demo is just a driver over it):
+`curl -s localhost:8080/search -d '{"query":"...","top_k":5}' -H 'content-type: application/json'`.
+
+**Persistence caveat (important):** the knowledge **graph** persists across service
+restarts when `GRAPH_STORE=rdf` (Oxigraph on disk). The **retrieval index** (chunks +
+keyword index) and the **KB pages** are currently held **in memory**, so they live only
+for the lifetime of the running service — restart it and you must re-ingest before
+`/search` returns hits. So "ask previously ingested data" works freely **while the
+service stays up**; surviving a restart for retrieval/KB is a known gap (see the repo
+`TODO.md`). Until then, keep the service running, or re-ingest after a restart (the
+fast structural pass in §9 makes that quick).
+
 ---
 
 ## 5. Full experience (real backends)

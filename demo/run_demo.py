@@ -528,18 +528,21 @@ def render_html(report: dict) -> str:
     ing = report["ingest"]
     snap = report["graph"]
     sweep = report["sweep"]
+    skipped = ing["counts"].get("skipped")
+    corpus_desc = ("querying previously ingested data" if skipped else
+                   f'{_esc(ing["counts"]["md"])} md + {_esc(ing["counts"]["pdf"])} pdf '
+                   f'from <code>{_esc(m["source"])}</code>')
     body = [
         '<div class="wrap">',
         '<h1>semantic-fabric — capability run</h1>',
-        f'<p class="sub">Source: <code>{_esc(m["source"])}</code> &middot; '
-        f'{_esc(ing["counts"]["md"])} md + {_esc(ing["counts"]["pdf"])} pdf &middot; '
+        f'<p class="sub">{corpus_desc} &middot; '
         f'generated {_esc(m["generated_at"])} &middot; contract '
         f'{_esc(m.get("contract_version", "?"))}</p>',
 
         '<h2>What the platform did</h2>',
         _capability_map(sweep["capabilities"]),
 
-        '<h2>Corpus ingested</h2>',
+        '<h2>' + ('Data in the platform' if skipped else 'Corpus ingested') + '</h2>',
         _stat_tiles(ing["counts"], snap.get("counts", {}), report["kb"]),
         '<div class="card"><h3>Knowledge base hierarchy</h3>'
         + _tree(snap.get("pages", [])) + '</div>',
@@ -580,14 +583,19 @@ def main(argv: list[str] | None = None) -> int:
                     help="per-request timeout in seconds (raise for slow LLM ingest)")
     ap.add_argument("--make-sample-pdf", action="store_true",
                     help="synthesize a small PDF into the corpus (needs PyMuPDF)")
+    ap.add_argument("--no-ingest", action="store_true",
+                    help="skip ingestion and ask against data already loaded in the "
+                         "service (query previously ingested data)")
     args = ap.parse_args(argv)
 
     global _TIMEOUT
     _TIMEOUT = args.timeout
     base = args.url.rstrip("/")
     source = Path(args.source)
-    if not source.is_dir():
-        print(f"error: source dir not found: {source}", file=sys.stderr)
+    if not args.no_ingest and not source.is_dir():
+        print(f"error: source dir not found: {source}\n"
+              f"(or pass --no-ingest to query data already loaded in the service)",
+              file=sys.stderr)
         return 2
 
     try:
@@ -600,22 +608,26 @@ def main(argv: list[str] | None = None) -> int:
               f"uvicorn api.main:app --port 8080", file=sys.stderr)
         return 2
 
-    if args.make_sample_pdf:
-        maybe_make_sample_pdf(source)
+    if args.no_ingest:
+        print("== skipping ingestion — querying data already loaded in the service ==")
+        ingest_report = {"files": [], "counts": {"md": 0, "pdf": 0, "failed": 0,
+                                                  "skipped": True}}
+    else:
+        if args.make_sample_pdf:
+            maybe_make_sample_pdf(source)
+        print(f"== discovering {source} ==")
+        md_pages, pdf_docs = discover(source)
+        print(f"   {len(md_pages)} markdown, {len(pdf_docs)} pdf")
 
-    print(f"== discovering {source} ==")
-    md_pages, pdf_docs = discover(source)
-    print(f"   {len(md_pages)} markdown, {len(pdf_docs)} pdf")
-
-    print(f"== ingesting (batch size {args.batch_size}, timeout {args.timeout}s) ==")
-    ingest_report = ingest(base, md_pages, pdf_docs, batch_size=args.batch_size)
-    c = ingest_report["counts"]
-    print(f"   done: {c['md']} md + {c['pdf']} pdf, {c['failed']} failed, "
-          f"{c.get('elapsed_s', 0)}s")
-    if c["failed"]:
-        for f in ingest_report["files"]:
-            if f["status"] != "ok":
-                print(f"   [failed] {f['kind']:8} {f['path']}: {f['detail']}")
+        print(f"== ingesting (batch size {args.batch_size}, timeout {args.timeout}s) ==")
+        ingest_report = ingest(base, md_pages, pdf_docs, batch_size=args.batch_size)
+        c = ingest_report["counts"]
+        print(f"   done: {c['md']} md + {c['pdf']} pdf, {c['failed']} failed, "
+              f"{c.get('elapsed_s', 0)}s")
+        if c["failed"]:
+            for f in ingest_report["files"]:
+                if f["status"] != "ok":
+                    print(f"   [failed] {f['kind']:8} {f['path']}: {f['detail']}")
 
     snapshot = get(base, "/graph")
     kb = {"authored": get(base, "/kb/authored/tree"),

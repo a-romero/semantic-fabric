@@ -134,3 +134,26 @@ Sketch (all in `graph/oxigraph_backend.py`, testable on pyoxigraph — no semant
 - Tests: register the ISA-eligibility CONSTRUCT above, `infer()`, then assert a plain
   SPARQL SELECT returns the three eligible products and that the triples persist across a
   fresh store at the same path.
+
+## Deferred: persist the retrieval index + KB across restarts
+
+**Status:** known gap, surfaced by the demo runbook.
+
+Today only the knowledge **graph** persists across a service restart (`GRAPH_STORE=rdf`,
+Oxigraph on disk). The **retrieval index** — the chunk store (`RetrievalIndex._chunks`)
+and the BM25 keyword index (`retrieval/bm25.py`) — and the **KB pages** (`kb/store.py`)
+are in-memory only. Even with `VECTOR_STORE=qdrant` (vectors persisted), a fresh process
+has an empty chunk store, so `/search` maps vector hits to nothing and returns no
+results until re-ingest.
+
+Consequence: you can query previously ingested data freely **while the service is up**
+(`--no-ingest`), but a restart requires re-ingesting for retrieval/KB.
+
+If/when we close it:
+- Persist chunks + KB pages (SQLite is enough; keep the in-memory stores as a cache/
+  default). Rebuild or persist the BM25 index alongside (e.g. store the postings, or
+  re-derive from persisted chunks on startup).
+- With Qdrant already persisting vectors, loading the persisted chunk store on startup
+  makes `/search` survive restarts end to end.
+- Keep the dependency-free in-memory default; persistence is an opt-in backend selected
+  by env, same pattern as the rest of the platform.
