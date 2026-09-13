@@ -14,6 +14,15 @@ from .validator import Constraint, ValidationRequest, ValidationResult, Violatio
 EX = "http://semantic-fabric/ex#"
 
 
+def _attr(obj: object, *names: str) -> str:
+    """First present attribute (or dict key) among ``names``, as a string."""
+    for name in names:
+        val = obj.get(name) if isinstance(obj, dict) else getattr(obj, name, None)
+        if val:
+            return str(val)
+    return ""
+
+
 def _shapes_ttl(constraints: list[Constraint]) -> str:
     lines = [
         "@prefix sh: <http://www.w3.org/ns/shacl#> .",
@@ -68,12 +77,18 @@ class ShaclValidator:
         shapes = _shapes_ttl(req.constraints)
         data = _data_ttl(req.entities)
         if self._mode == "semantica":
-            res = self._run(data_graph=data, shapes_graph=shapes)
-            conforms = bool(res.get("conforms"))
+            # 0.6.8: run_shacl_validation(data_graph_str, shacl_str, ...) -> report.
+            report = self._run(data, shapes)
+            conforms = bool(getattr(report, "conforms", False))
+            raw = getattr(report, "violations", None) or []
             violations = [
-                Violation(v.get("focus", ""), v.get("target_class", ""),
-                          v.get("path", ""), v.get("message", ""))
-                for v in res.get("results", [])
+                Violation(
+                    _attr(v, "focus_node", "focus", "focusNode"),
+                    _attr(v, "target_class", "source_shape", "sourceShape"),
+                    _attr(v, "path", "result_path", "resultPath"),
+                    _attr(v, "message", "result_message", "resultMessage") or str(v),
+                )
+                for v in raw
             ]
             return ValidationResult(conforms=conforms, violations=violations)
         # pyshacl direct
