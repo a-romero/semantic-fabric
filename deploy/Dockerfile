@@ -10,6 +10,7 @@ COPY graph/ ./graph/
 COPY kb/ ./kb/
 COPY reasoning/ ./reasoning/
 COPY provenance/ ./provenance/
+COPY ontology/ ./ontology/
 
 RUN pip install --no-cache-dir ./client && pip install --no-cache-dir fastapi "uvicorn[standard]"
 

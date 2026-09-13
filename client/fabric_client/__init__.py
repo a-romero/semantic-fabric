@@ -14,12 +14,16 @@ from .models import (
     IngestJob,
     IngestRequest,
     KBPage,
+    OntologyConstraint,
     Provenance,
     ReasonRequest,
     ReasonResponse,
     ReasonRule,
     SearchRequest,
     SearchResponse,
+    ValidateRequest,
+    ValidateResponse,
+    Violation,
 )
 
 __version__ = "0.1.0"
@@ -35,9 +39,13 @@ __all__ = [
     "IngestRequest",
     "KBPage",
     "Provenance",
+    "OntologyConstraint",
     "ReasonRequest",
     "ReasonResponse",
     "ReasonRule",
     "SearchRequest",
     "SearchResponse",
+    "ValidateRequest",
+    "ValidateResponse",
+    "Violation",
 ]

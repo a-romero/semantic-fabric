@@ -144,6 +144,34 @@ class Decision(BaseModel):
     recorded_time: str | None = None
 
 
+class OntologyConstraint(BaseModel):
+    """A declarative constraint over entities of a class (compiled to SHACL server-side)."""
+
+    target_class: str
+    required: list[str] = Field(default_factory=list)
+    min_values: dict[str, float] = Field(default_factory=dict)
+    allowed_values: dict[str, list[Any]] = Field(default_factory=dict)
+    message: str | None = None
+
+
+class ValidateRequest(BaseModel):
+    # entities: [{"id":..., "class":"Policy", "props": {...}}]
+    entities: list[dict[str, Any]] = Field(default_factory=list)
+    constraints: list[OntologyConstraint] = Field(default_factory=list)
+
+
+class Violation(BaseModel):
+    entity_id: str
+    target_class: str
+    path: str
+    message: str
+
+
+class ValidateResponse(BaseModel):
+    conforms: bool
+    violations: list[Violation] = Field(default_factory=list)
+
+
 class KBPage(BaseModel):
     namespace: str
     path: str

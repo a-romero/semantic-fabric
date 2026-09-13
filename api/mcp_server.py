@@ -81,6 +81,23 @@ def build_server():  # noqa: ANN201 - FastMCP type optional at import time
         return get_reasoning().reason(rreq).model_dump()
 
     @mcp.tool()
+    def validate(entities: list[dict], constraints: list[dict]) -> dict:
+        """SHACL policy gate: check entities against constraints. Returns conforms + violations."""
+        from ontology.validator import Constraint, ValidationRequest
+
+        from .state import get_validator
+
+        vreq = ValidationRequest(
+            entities=entities,
+            constraints=[Constraint(**c) for c in constraints],
+        )
+        res = get_validator().validate(vreq)
+        return {
+            "conforms": res.conforms,
+            "violations": [vars(v) for v in res.violations],
+        }
+
+    @mcp.tool()
     def record_decision(scenario: str, outcome: str, evidence: list[str] | None = None) -> dict:
         """Record an agent decision derived from the evidence it cited (provenance)."""
         from fabric_client.models import Decision

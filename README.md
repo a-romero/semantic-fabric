@@ -11,17 +11,18 @@ lightweight [`fabric-client`](client/) package. The full rationale lives in
 skilled-agent's `docs/SEMANTICA_SEPARATION_DESIGN.md` and
 `docs/SEMANTICA_INTEGRATION_VISION.md`.
 
-> **Status: Phase 3 in progress (provenance + decisions).** Real and wired: `/search`
-> (hybrid vector + BM25, RRF-fused), `/graph/expand` (GraphRAG), `/ingest` for
-> `markdown_tree` **and** `pdf_batch`, the `generated/` + `authored/` KB namespaces,
-> **`/decisions`** (each agent answer recorded as a decision derived from its cited
-> evidence, tamper-evident hash chain, `GET /decisions/{id}/chain` for transitive
-> lineage), and **`/reason`** — deterministic, explainable inference that returns a
-> rule trace ("Given …, we conclude … using rule 'R1'."). Runs on pure-Python defaults
-> out of the box; `.[prod]` swaps in Qdrant + BGE-M3, `.[semantica]` swaps in real
-> W3C PROV-O provenance and Datalog reasoning (see ADR 0001). The SHACL policy gate is
-> the next Phase 3 step; a real PDF layout parser, VLM captioner, and LLM-backed
-> extraction remain pluggable layers.
+> **Status: Phase 3 deterministic trio complete (provenance · reasoning · SHACL).**
+> Real and wired: `/search` (hybrid vector + BM25, RRF-fused), `/graph/expand`
+> (GraphRAG), `/ingest` for `markdown_tree` **and** `pdf_batch`, the `generated/` +
+> `authored/` KB namespaces, **`/decisions`** (each agent answer recorded as a decision
+> derived from its cited evidence, tamper-evident hash chain, `GET /decisions/{id}/chain`
+> for transitive lineage), **`/reason`** (deterministic, explainable inference with a
+> rule trace), and **`/validate`** — the SHACL policy gate: check entity data against
+> declared constraints (required properties, min values, allowed values) before an
+> answer leaves the plane. Runs on pure-Python defaults out of the box; `.[prod]` swaps
+> in Qdrant + BGE-M3, `.[semantica]` swaps in real W3C PROV-O provenance, Datalog
+> reasoning, and pyshacl SHACL (see ADR 0001). A real PDF layout parser, VLM captioner,
+> and LLM-backed extraction remain pluggable layers.
 
 ## The boundary
 

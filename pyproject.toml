@@ -31,7 +31,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["api", "ingest", "retrieval", "graph", "kb", "reasoning", "provenance"]
+packages = ["api", "ingest", "retrieval", "graph", "kb", "reasoning", "provenance", "ontology"]
 
 [tool.pytest.ini_options]
 pythonpath = ["client", "."]

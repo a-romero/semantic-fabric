@@ -23,15 +23,25 @@ from fabric_client.models import (
     ReasonResponse,
     SearchRequest,
     SearchResponse,
+    ValidateRequest,
+    ValidateResponse,
 )
 from fastapi import FastAPI
 
 from ingest.markdown import ingest_markdown_tree
 from ingest.pdf import ingest_pdf_batch
+from ontology.validator import Constraint, ValidationRequest
 from reasoning.engine import ReasoningRequest, Rule
 
 from . import stubs
-from .state import get_index, get_kb, get_object_store, get_provenance, get_reasoning
+from .state import (
+    get_index,
+    get_kb,
+    get_object_store,
+    get_provenance,
+    get_reasoning,
+    get_validator,
+)
 
 app = FastAPI(
     title="semantic-fabric",
@@ -122,6 +132,34 @@ def reason(req: ReasonRequest) -> ReasonResponse:
         rules=[Rule(name=r.name, body=list(r.body), head=r.head) for r in req.rules],
     )
     return get_reasoning().reason(rreq)
+
+
+@app.post("/validate", response_model=ValidateResponse)
+def validate(req: ValidateRequest) -> ValidateResponse:
+    # SHACL policy gate: check entity data against declared constraints. This is the
+    # deterministic gate an answer passes before leaving the semantic plane.
+    vreq = ValidationRequest(
+        entities=list(req.entities),
+        constraints=[
+            Constraint(
+                target_class=c.target_class,
+                required=list(c.required),
+                min_values=dict(c.min_values),
+                allowed_values=dict(c.allowed_values),
+                message=c.message,
+            )
+            for c in req.constraints
+        ],
+    )
+    result = get_validator().validate(vreq)
+    return ValidateResponse(
+        conforms=result.conforms,
+        violations=[
+            {"entity_id": v.entity_id, "target_class": v.target_class,
+             "path": v.path, "message": v.message}
+            for v in result.violations
+        ],
+    )
 
 
 @app.post("/decisions")

@@ -12,6 +12,7 @@ import os
 
 from ingest.object_store import InMemoryObjectStore, ObjectStore
 from kb.store import KBStore
+from ontology.validator import OntologyValidator, build_ontology_validator
 from provenance.store import ProvenanceStore, build_provenance_store
 from reasoning.engine import ReasoningEngine, build_reasoning_engine
 from retrieval.index import RetrievalIndex, build_index_from_env
@@ -21,6 +22,7 @@ _kb: KBStore | None = None
 _object_store: ObjectStore | None = None
 _provenance: ProvenanceStore | None = None
 _reasoning: ReasoningEngine | None = None
+_validator: OntologyValidator | None = None
 
 
 def get_index() -> RetrievalIndex:
@@ -81,3 +83,15 @@ def get_reasoning() -> ReasoningEngine:
 def set_reasoning(engine: ReasoningEngine) -> None:
     global _reasoning
     _reasoning = engine
+
+
+def get_validator() -> OntologyValidator:
+    global _validator
+    if _validator is None:
+        _validator = build_ontology_validator(os.getenv("ONTOLOGY_VALIDATOR"))
+    return _validator
+
+
+def set_validator(validator: OntologyValidator) -> None:
+    global _validator
+    _validator = validator
