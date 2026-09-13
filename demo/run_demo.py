@@ -42,14 +42,16 @@ from pathlib import Path
 # Bypass any HTTP(S)_PROXY / ALL_PROXY in the environment — the fabric is typically on
 # localhost, and a corporate proxy will 400/407 a request it should never have seen.
 _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+_TIMEOUT = 600  # seconds; set from --timeout in main (LLM-on-ingest can be slow at scale)
 
 
-def _req(method: str, url: str, body: dict | None = None, timeout: int = 120) -> dict:
+def _req(method: str, url: str, body: dict | None = None,
+         timeout: int | None = None) -> dict:
     data = json.dumps(body).encode() if body is not None else None
     headers = {"content-type": "application/json"} if data is not None else {}
     req = urllib.request.Request(url, data=data, method=method, headers=headers)
     try:
-        with _OPENER.open(req, timeout=timeout) as resp:
+        with _OPENER.open(req, timeout=timeout or _TIMEOUT) as resp:
             return json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", "replace")[:300]
@@ -60,8 +62,8 @@ def get(base: str, path: str) -> dict:
     return _req("GET", base + path)
 
 
-def post(base: str, path: str, body: dict) -> dict:
-    return _req("POST", base + path, body)
+def post(base: str, path: str, body: dict, timeout: int | None = None) -> dict:
+    return _req("POST", base + path, body, timeout=timeout)
 
 
 def _const(s: str) -> str:
@@ -147,20 +149,37 @@ def maybe_make_sample_pdf(source: Path) -> None:
     doc.close()
 
 
-def ingest(base: str, md_pages: list[dict], pdf_docs: list[dict]) -> dict:
+def ingest(base: str, md_pages: list[dict], pdf_docs: list[dict],
+           batch_size: int = 25) -> dict:
+    """Ingest in batches so a large corpus survives (a single mega-request would time
+    out — LLM extraction-on-ingest runs one model call per page, server-side)."""
+    import time
+
     files, counts = [], {"md": 0, "pdf": 0, "chunks": 0, "tables": 0, "figures": 0,
                          "generated_pages": 0, "failed": 0}
-    if md_pages:
-        job = post(base, "/ingest", {"kind": "markdown_tree", "namespace": "authored",
-                                     "payload": {"pages": md_pages}})
-        ok = job.get("status") == "done"
-        for pg in md_pages:
+    t0 = time.time()
+
+    # Markdown in batches of `batch_size`; a failed/timed-out batch is recorded and the
+    # run continues with the next batch rather than losing everything.
+    batches = [md_pages[i:i + batch_size] for i in range(0, len(md_pages), batch_size)]
+    for bi, batch in enumerate(batches, 1):
+        try:
+            job = post(base, "/ingest", {"kind": "markdown_tree", "namespace": "authored",
+                                         "payload": {"pages": batch}})
+            ok, detail = job.get("status") == "done", job.get("detail", "")
+        except Exception as e:
+            ok, detail = False, str(e)[:200]
+        for pg in batch:
             files.append({"path": pg["path"], "kind": "markdown",
-                          "status": "ok" if ok else "failed", "detail": job.get("detail", "")})
-        counts["md"] = len(md_pages)
-        if not ok:
-            counts["failed"] += len(md_pages)
-    for doc in pdf_docs:
+                          "status": "ok" if ok else "failed", "detail": detail})
+        counts["md"] += len(batch)
+        counts["failed"] += 0 if ok else len(batch)
+        done = min(bi * batch_size, len(md_pages))
+        print(f"   markdown batch {bi}/{len(batches)} "
+              f"({done}/{len(md_pages)} pages) [{'ok' if ok else 'FAILED'}] "
+              f"{time.time() - t0:.0f}s", flush=True)
+
+    for di, doc in enumerate(pdf_docs, 1):
         try:
             job = post(base, "/ingest", {"kind": "pdf_batch",
                        "payload": {"documents": [{k: doc[k] for k in
@@ -170,13 +189,15 @@ def ingest(base: str, md_pages: list[dict], pdf_docs: list[dict]) -> dict:
                           "status": "ok" if status == "done" else "failed",
                           "detail": job.get("detail", "")})
             counts["pdf"] += 1
-            if status != "done":
-                counts["failed"] += 1
-        except urllib.error.HTTPError as e:
+            counts["failed"] += 0 if status == "done" else 1
+        except Exception as e:
             files.append({"path": doc["source_path"], "kind": "pdf",
-                          "status": "failed", "detail": f"HTTP {e.code}"})
+                          "status": "failed", "detail": str(e)[:200]})
             counts["failed"] += 1
-    # Corpus-wide chunk/table/figure counts come from the KB + graph after ingest.
+        print(f"   pdf {di}/{len(pdf_docs)} {doc['source_path']} "
+              f"{time.time() - t0:.0f}s", flush=True)
+
+    counts["elapsed_s"] = round(time.time() - t0, 1)
     return {"files": files, "counts": counts}
 
 
@@ -552,10 +573,17 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--url", default=os.getenv("FABRIC_URL", "http://localhost:8080"))
     ap.add_argument("--out", default="demo/out")
     ap.add_argument("--seed", default=None, help="graph-expand seed (default: top hit)")
+    ap.add_argument("--batch-size", type=int, default=25,
+                    help="markdown pages per /ingest request (smaller = more resilient "
+                         "when extraction-on-ingest is enabled)")
+    ap.add_argument("--timeout", type=int, default=600,
+                    help="per-request timeout in seconds (raise for slow LLM ingest)")
     ap.add_argument("--make-sample-pdf", action="store_true",
                     help="synthesize a small PDF into the corpus (needs PyMuPDF)")
     args = ap.parse_args(argv)
 
+    global _TIMEOUT
+    _TIMEOUT = args.timeout
     base = args.url.rstrip("/")
     source = Path(args.source)
     if not source.is_dir():
@@ -579,10 +607,15 @@ def main(argv: list[str] | None = None) -> int:
     md_pages, pdf_docs = discover(source)
     print(f"   {len(md_pages)} markdown, {len(pdf_docs)} pdf")
 
-    print("== ingesting ==")
-    ingest_report = ingest(base, md_pages, pdf_docs)
-    for f in ingest_report["files"]:
-        print(f"   [{f['status']}] {f['kind']:8} {f['path']}")
+    print(f"== ingesting (batch size {args.batch_size}, timeout {args.timeout}s) ==")
+    ingest_report = ingest(base, md_pages, pdf_docs, batch_size=args.batch_size)
+    c = ingest_report["counts"]
+    print(f"   done: {c['md']} md + {c['pdf']} pdf, {c['failed']} failed, "
+          f"{c.get('elapsed_s', 0)}s")
+    if c["failed"]:
+        for f in ingest_report["files"]:
+            if f["status"] != "ok":
+                print(f"   [failed] {f['kind']:8} {f['path']}: {f['detail']}")
 
     snapshot = get(base, "/graph")
     kb = {"authored": get(base, "/kb/authored/tree"),

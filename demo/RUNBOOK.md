@@ -94,7 +94,9 @@ PYTHONPATH=client:. python demo/run_demo.py \
 - **PDF**: parsed server-side into per-page text, tables and figures (needs the
   `.[pdf]` extra — see §5; without it, PDFs are skipped and reported as such).
 - Optional flags: `--seed <page-path>` to fix the GraphRAG starting point,
-  `--url http://host:8080` for a remote service, `--out <dir>` for the report location.
+  `--url http://host:8080` for a remote service, `--out <dir>` for the report location,
+  `--batch-size N` (markdown pages per request, default 25) and `--timeout S`
+  (per-request seconds, default 600) — see §9 for large corpora.
 
 > The report is a **local file** — your data never leaves your machine. Nothing is
 > published anywhere.
@@ -210,3 +212,32 @@ The same capabilities are also exposed as **MCP tools** (`search`, `graph_query`
 | PDFs reported as `failed` | Install `.[pdf]` and set `PDF_PARSER=pymupdf`. |
 | Captions are placeholders | The caption model isn't vision-capable on your gateway; set `CAPTION_MODEL` to one that is (optional). |
 | Reasoning answer is `No` | The synthesized demo rule derives from the *first* extracted relation; with an empty graph there are no relations to reason over. |
+| Client `timed out` / ingest very slow on a big corpus | Extraction-on-ingest is one LLM call per page — see §9. |
+
+---
+
+## 9. Large corpora & performance
+
+Ingest cost is dominated by **LLM extraction: one model call per page** (only when
+`EXTRACTION_ON_INGEST=true`). Retrieval indexing itself is fast. For hundreds–thousands
+of documents:
+
+- **The driver batches automatically** — markdown goes up `--batch-size` pages per
+  request (default 25), each batch reports progress, and a failed/timed-out batch is
+  recorded and skipped rather than losing the whole run. Lower `--batch-size` (e.g. 10)
+  for more frequent checkpoints; raise `--timeout` (default 600s) for slow gateways.
+- **Speed extraction up with `EXTRACTION_CONCURRENCY`** (server-side, default 4): the
+  per-page LLM calls are network-bound and run concurrently. Raise it (e.g. `8`–`16`)
+  to ingest faster; lower it to `1` if your gateway rate-limits (a rate-limited call
+  degrades to "no extraction for that page", it doesn't fail the ingest).
+  ```bash
+  EXTRACTION_CONCURRENCY=8 ... uvicorn api.main:app --port 8080
+  ```
+- **Fast structural pass (no LLM):** to ingest a large corpus quickly for retrieval +
+  the KB hierarchy without building the entity graph, start the service **without**
+  `EXTRACTION_ON_INGEST`. Search, GraphRAG (hierarchy/topics), provenance and the SHACL
+  gate all still work; the knowledge-graph diagram and reason-over-KG will be `n/a`.
+  You can enrich later by re-ingesting with extraction enabled.
+
+Rough guide: with `EXTRACTION_CONCURRENCY=8` and a ~2s/call gateway, ~850 pages ingest
+in a handful of minutes; serially it would be ~30+ minutes. Without extraction, seconds.

@@ -72,7 +72,7 @@ class RetrievalIndex:
         run through it: extracted entities/relations become graph edges and the entity
         names are attached to that page's chunks (surfaced as EvidenceUnit.entities).
         """
-        new_chunks: list[Chunk] = []
+        prepared: list[tuple[str, str, list[Chunk]]] = []
         for page in pages:
             path = page["path"]
             frontmatter = page.get("frontmatter") or {}
@@ -88,10 +88,28 @@ class RetrievalIndex:
                 topics=_page_topics(frontmatter),
                 section=path.split("/", 1)[0] if "/" in path else "",
             )
-            if extractor is not None:
-                names = self.apply_extraction(path, extractor.extract(body))
+            prepared.append((path, body, page_chunks))
+
+        if extractor is not None:
+            # Extraction is one LLM call per page — the ingest bottleneck at scale. The
+            # calls are network-bound, so run them concurrently (EXTRACTION_CONCURRENCY),
+            # then apply the results to the graph SEQUENTIALLY on this thread so graph
+            # mutations stay single-threaded and ordering is deterministic.
+            conc = max(1, int(os.getenv("EXTRACTION_CONCURRENCY", "4")))
+            bodies = [b for _, b, _ in prepared]
+            if conc > 1 and len(bodies) > 1:
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(max_workers=conc) as pool:
+                    extractions = list(pool.map(extractor.extract, bodies))
+            else:
+                extractions = [extractor.extract(b) for b in bodies]
+            for (path, _body, page_chunks), extraction in zip(prepared, extractions):
+                names = self.apply_extraction(path, extraction)
                 for c in page_chunks:
                     c.entities = names
+
+        new_chunks: list[Chunk] = []
+        for _path, _body, page_chunks in prepared:
             new_chunks.extend(page_chunks)
         return self.add_chunks(new_chunks)
 
