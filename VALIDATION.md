@@ -4,7 +4,7 @@ CI runs only the pure-Python defaults (in-memory vector store + graph + KB, hash
 embedder, simple reasoner/validator, null extractor, null captioner, null PDF parser).
 The **real backends** — Qdrant, BGE-M3, the semantica layers (PROV-O provenance,
 Datalog reasoning, SHACL), LiteLLM extraction, LiteLLM VLM figure captioning, PyMuPDF
-layout parsing, and the persistent Kuzu (LPG) / Oxigraph (RDF) graph stores — need
+layout parsing, and the persistent, SPARQL-native Oxigraph (RDF) graph store — need
 models/services/credentials CI doesn't have, so they run behind optional extras and
 are validated on a capable host.
 
@@ -31,13 +31,12 @@ with a reason** (shown via `pytest -rs`). A **failure** means a real backend is 
 | Extraction | `test_extraction.py` (`test_llm_extractor_live`) | `litellm` + `EXTRACTION_LIVE=1` + provider creds | typed entities/relations from real text |
 | PDF layout | `test_pdf_parser.py` (`test_pdf_pymupdf_live`) | `PyMuPDF` (`.[pdf]`) | raw PDF bytes → per-page text/tables/figures (parses a PDF synthesized with fitz) |
 | VLM captioning | `test_captioner.py` (`test_llm_captioner_live`) | `litellm` + `CAPTION_LIVE=1` + vision model creds | a real caption generated from image bytes |
-| Graph (LPG) | `test_graph_persistence.py` | `kuzu` (`.[graph]`) | pages/entities/relations persist to Kuzu and reload into a fresh store |
-| Graph (RDF) | `test_graph_persistence.py` | `pyoxigraph` (`.[graph]`) | same graph persists to Oxigraph as RDF triples and reloads |
+| Graph (RDF) | `test_graph_persistence.py` | `pyoxigraph` + `rdflib` (`.[graph]`) | pages/entities/relations persist to Oxigraph as RDF triples and reload; SPARQL-native `expand`; raw `sparql()` + `rdf_graph()` snapshot for semantica |
 
 Provider for extraction is chosen by `EXTRACTION_MODEL`, for captioning by `CAPTION_MODEL`
 (`anthropic/claude-opus-5` | `openai/gpt-4o-mini` | `ollama/llama3.1` | proxy — the
 captioner needs a **vision-capable** model). The persistent graph store is selected by
-`GRAPH_STORE` (`lpg` = Kuzu, `rdf` = Oxigraph) at `GRAPH_DB_PATH`; the PDF parser by
+`GRAPH_STORE=rdf` (SPARQL-native Oxigraph) at `GRAPH_DB_PATH`; the PDF parser by
 `PDF_PARSER=pymupdf` and the captioner by `CAPTION_BACKEND=llm`.
 
 ## Live end-to-end (optional)

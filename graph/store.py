@@ -41,6 +41,20 @@ def _norm_topics(topics: list[str]) -> set[str]:
     return {t.strip().lower() for t in topics if t and t.strip()}
 
 
+def nearest_parent(path: str, page_paths) -> str | None:
+    """Nearest ancestor page (…/index.md) above ``path`` within ``page_paths``.
+
+    Shared by the in-memory and RDF backends so path-derived hierarchy is identical.
+    """
+    parent_dir = PurePosixPath(path).parent.parent  # skip the page's own dir
+    while str(parent_dir) not in (".", "/", ""):
+        candidate = str(parent_dir / "index.md")
+        if candidate in page_paths and candidate != path:
+            return candidate
+        parent_dir = parent_dir.parent
+    return None
+
+
 class InMemoryGraphStore:
     """Pure-Python page graph. Default backend; no external service."""
 
@@ -99,13 +113,7 @@ class InMemoryGraphStore:
     # -- edge derivation --------------------------------------------------
     def _parent(self, path: str) -> str | None:
         """Nearest ancestor page (…/index.md) above this path, if any."""
-        parent_dir = PurePosixPath(path).parent.parent  # skip the page's own dir
-        while str(parent_dir) not in (".", "/", ""):
-            candidate = str(parent_dir / "index.md")
-            if candidate in self._pages and candidate != path:
-                return candidate
-            parent_dir = parent_dir.parent
-        return None
+        return nearest_parent(path, self._pages)
 
     def _edges(self, path: str, rel_types: list[str] | None) -> list[tuple[str, str]]:
         want = set(rel_types) if rel_types else {
@@ -204,27 +212,19 @@ class InMemoryGraphStore:
 def build_graph_store(kind: str | None) -> GraphStore:
     """Factory from a GRAPH_STORE value. 'memory' (default) is dependency-free.
 
-    'lpg' selects the persistent Kuzu backend and 'rdf' the persistent Oxigraph
-    backend (both ``.[graph]`` extra), each durable at ``GRAPH_DB_PATH``. Any of them
-    falls back to in-memory if the native library is not installed, so the default
-    install and CI stay dependency-free.
+    'rdf' selects the persistent, SPARQL-native Oxigraph backend (``.[graph]`` extra),
+    durable at ``GRAPH_DB_PATH`` — the store that shares semantica's RDF/SPARQL model.
+    It falls back to in-memory if pyoxigraph is not installed, so the default install
+    and CI stay dependency-free.
     """
     import os
 
     choice = (kind or "memory").strip().lower()
-    db_path = os.getenv("GRAPH_DB_PATH")
-    if choice in {"lpg", "kuzu"}:
-        try:
-            from .kuzu_backend import KuzuGraphStore
-
-            return KuzuGraphStore(db_path or "./graph-kuzu")
-        except Exception:
-            return InMemoryGraphStore()
     if choice in {"rdf", "oxigraph"}:
         try:
             from .oxigraph_backend import OxigraphGraphStore
 
-            return OxigraphGraphStore(db_path or "./graph-oxigraph")
+            return OxigraphGraphStore(os.getenv("GRAPH_DB_PATH") or "./graph-oxigraph")
         except Exception:
             return InMemoryGraphStore()
     return InMemoryGraphStore()
