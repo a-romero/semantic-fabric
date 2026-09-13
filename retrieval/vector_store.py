@@ -10,7 +10,10 @@ Selected by ``VECTOR_STORE`` (``memory`` default, ``qdrant`` in deployment).
 
 from __future__ import annotations
 
+import logging
 from typing import Protocol
+
+logger = logging.getLogger(__name__)
 
 
 class VectorStore(Protocol):
@@ -88,9 +91,24 @@ class QdrantVectorStore:
 
 
 def build_vector_store(kind: str | None, *, dim: int, url: str | None, collection: str):
-    """Factory from a VECTOR_STORE value."""
+    """Factory from a VECTOR_STORE value.
+
+    Falls back to the in-memory store if Qdrant can't be constructed or reached (missing
+    dep, no server, or a proxy intercepting the connection), so a misconfigured vector
+    store degrades gracefully instead of failing every request — the same fallback
+    pattern the other optional backends use. Real embeddings still drive retrieval.
+    """
     if not kind or kind.strip().lower() in {"memory", "inmemory", "in_memory"}:
         return InMemoryVectorStore()
     if kind.strip().lower() == "qdrant":
-        return QdrantVectorStore(url or "http://localhost:6333", collection, dim)
+        target = url or "http://localhost:6333"
+        try:
+            return QdrantVectorStore(target, collection, dim)
+        except Exception as exc:
+            logger.warning(
+                "VECTOR_STORE=qdrant unavailable at %s (%s); falling back to the "
+                "in-memory vector store. If you run Qdrant on localhost behind a proxy, "
+                "set NO_PROXY=localhost,127.0.0.1.", target, exc,
+            )
+            return InMemoryVectorStore()
     raise ValueError(f"Unknown VECTOR_STORE: {kind!r}")

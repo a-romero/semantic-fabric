@@ -110,8 +110,13 @@ selectors (this mirrors `scripts/validate.sh`):
 ```bash
 pip install -e ".[prod,semantica,llm,pdf,graph]"
 
-# retrieval: real embeddings + vector store
-export VECTOR_STORE=qdrant EMBEDDING_MODEL=BAAI/bge-m3          # (Qdrant server optional)
+# retrieval: real BGE-M3 embeddings over the in-memory vector store — this alone gives
+# real hybrid retrieval, no external service needed. Leave VECTOR_STORE unset (default).
+export EMBEDDING_MODEL=BAAI/bge-m3
+# OPTIONAL: only if you actually run a Qdrant server. On localhost behind a corporate
+# proxy you must also bypass it, or the platform will fall back to in-memory:
+#   export VECTOR_STORE=qdrant QDRANT_URL=http://localhost:6333
+#   export NO_PROXY=localhost,127.0.0.1
 
 # the knowledge graph: extract entities/relations at ingest, using YOUR gateway model
 export EXTRACTION_BACKEND=llm EXTRACTION_ON_INGEST=true
@@ -201,6 +206,7 @@ The same capabilities are also exposed as **MCP tools** (`search`, `graph_query`
 | `could not GET …/health` (nothing listening) | Start the service first (§3, Terminal A). |
 | Extraction / Reason show `n/a` | You're on defaults — set `EXTRACTION_BACKEND=llm` + `EXTRACTION_ON_INGEST=true` + a model (§5). |
 | Knowledge graph is empty | Same as above — the graph is built from extracted entities/relations. |
+| Server log: `VECTOR_STORE=qdrant unavailable … falling back to in-memory` | No Qdrant server, or a proxy is intercepting `localhost:6333`. Retrieval still works (in-memory + real embeddings). To use Qdrant, run the server and `export NO_PROXY=localhost,127.0.0.1`; otherwise leave `VECTOR_STORE` unset. |
 | PDFs reported as `failed` | Install `.[pdf]` and set `PDF_PARSER=pymupdf`. |
 | Captions are placeholders | The caption model isn't vision-capable on your gateway; set `CAPTION_MODEL` to one that is (optional). |
 | Reasoning answer is `No` | The synthesized demo rule derives from the *first* extracted relation; with an empty graph there are no relations to reason over. |
