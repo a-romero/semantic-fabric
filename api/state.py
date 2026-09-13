@@ -46,7 +46,13 @@ def set_index(index: RetrievalIndex) -> None:
 def get_kb() -> KBStore:
     global _kb
     if _kb is None:
-        _kb = KBStore()
+        db = os.getenv("FABRIC_DB")
+        if db:
+            from retrieval.persistence import get_store
+            _kb = KBStore(persist=get_store(db))
+            _kb.load_persisted()
+        else:
+            _kb = KBStore()
     return _kb
 
 

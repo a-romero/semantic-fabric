@@ -18,7 +18,7 @@ from graph.store import GraphStore, InMemoryGraphStore, build_graph_store
 from .bm25 import BM25Index
 from .chunking import Chunk, chunk_page
 from .embedder import Embedder, build_embedder
-from .vector_store import VectorStore, build_vector_store
+from .vector_store import InMemoryVectorStore, VectorStore, build_vector_store
 
 RRF_K = 60  # standard RRF damping constant
 
@@ -57,12 +57,14 @@ class RetrievalIndex:
         embedder: Embedder,
         vector_store: VectorStore,
         graph_store: GraphStore | None = None,
+        persist=None,
     ) -> None:
         self._embedder = embedder
         self._vs = vector_store
         self._graph = graph_store if graph_store is not None else InMemoryGraphStore()
         self._bm25 = BM25Index()
         self._chunks: dict[str, Chunk] = {}
+        self._persist = persist  # optional SqliteStore for restart durability
 
     # -- ingestion --------------------------------------------------------
     def add_pages(self, pages: list[dict], namespace: str = "authored", extractor=None) -> int:
@@ -137,7 +139,35 @@ class RetrievalIndex:
         for c in chunks:
             self._bm25.add(c.id, f"{c.page_title} {c.section_title} {c.text}")
             self._chunks[c.id] = c
+        if self._persist is not None:
+            from dataclasses import asdict
+            self._persist.save_chunks(
+                [(c.id, asdict(c), v) for c, v in zip(chunks, vectors)]
+            )
         return len(chunks)
+
+    def load_persisted(self) -> int:
+        """Rebuild the chunk store, BM25, and (in-memory) vectors from the SQLite sidecar.
+
+        Called on startup when FABRIC_DB is set, so /search survives a restart. Vectors
+        are re-upserted only into an in-memory vector store; a self-persisting store
+        (Qdrant) keeps its own vectors, so we don't duplicate them there.
+        """
+        if self._persist is None:
+            return 0
+        rows = self._persist.load_chunks()
+        if not rows:
+            return 0
+        ids, vectors = [], []
+        for cid, data, vec in rows:
+            chunk = Chunk(**data)
+            self._chunks[cid] = chunk
+            self._bm25.add(cid, f"{chunk.page_title} {chunk.section_title} {chunk.text}")
+            ids.append(cid)
+            vectors.append(vec)
+        if isinstance(self._vs, InMemoryVectorStore):
+            self._vs.upsert(ids, vectors)
+        return len(rows)
 
     @property
     def size(self) -> int:
@@ -234,4 +264,12 @@ def build_index_from_env() -> RetrievalIndex:
         collection=os.getenv("QDRANT_COLLECTION", "authored"),
     )
     graph = build_graph_store(os.getenv("GRAPH_STORE"))
-    return RetrievalIndex(embedder, vs, graph)
+    persist = None
+    db = os.getenv("FABRIC_DB")
+    if db:
+        from .persistence import get_store
+        persist = get_store(db)
+    index = RetrievalIndex(embedder, vs, graph, persist=persist)
+    if persist is not None:
+        index.load_persisted()
+    return index

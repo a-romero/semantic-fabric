@@ -114,14 +114,19 @@ PYTHONPATH=client:. python demo/run_demo.py --no-ingest \
 Or hit the API directly (the demo is just a driver over it):
 `curl -s localhost:8080/search -d '{"query":"...","top_k":5}' -H 'content-type: application/json'`.
 
-**Persistence caveat (important):** the knowledge **graph** persists across service
-restarts when `GRAPH_STORE=rdf` (Oxigraph on disk). The **retrieval index** (chunks +
-keyword index) and the **KB pages** are currently held **in memory**, so they live only
-for the lifetime of the running service — restart it and you must re-ingest before
-`/search` returns hits. So "ask previously ingested data" works freely **while the
-service stays up**; surviving a restart for retrieval/KB is a known gap (see the repo
-`TODO.md`). Until then, keep the service running, or re-ingest after a restart (the
-fast structural pass in §9 makes that quick).
+**Persisting across restarts:** set `FABRIC_DB=<path>` (and `GRAPH_STORE=rdf` for the
+graph) and everything survives a service restart — no re-ingest needed:
+
+```bash
+FABRIC_DB=./fabric.db GRAPH_STORE=rdf GRAPH_DB_PATH=./graph-oxigraph \
+  PYTHONPATH=client:. uvicorn api.main:app --port 8080
+```
+
+`FABRIC_DB` is a SQLite sidecar that persists the retrieval chunks (with their vectors)
+and the KB pages; on startup the index rebuilds and `/search`, `/kb` and `--no-ingest`
+work immediately against the previously ingested corpus. Without `FABRIC_DB` the
+retrieval index + KB are in-memory (the default) and a restart needs a re-ingest — the
+fast structural pass in §9 makes that quick.
 
 ---
 
@@ -152,6 +157,9 @@ export REASONING_BACKEND=semantica PROVENANCE_BACKEND=semantica ONTOLOGY_VALIDAT
 
 # persistent, SPARQL-native RDF graph (survives restarts, SPARQL-queryable)
 export GRAPH_STORE=rdf GRAPH_DB_PATH=./graph-oxigraph
+
+# persist the retrieval index + KB too, so /search and /kb survive a restart (no re-ingest)
+export FABRIC_DB=./fabric.db
 
 # PDF layout parsing + figure captioning
 export PDF_PARSER=pymupdf
