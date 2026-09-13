@@ -70,9 +70,15 @@ def test_null_parser_gives_actionable_error():
 
 
 def test_build_pdf_parser_defaults_to_null():
+    import importlib.util
+
     assert isinstance(build_pdf_parser(None), NullPdfParser)
-    # PyMuPDF not installed here -> falls back to null rather than raising.
-    assert isinstance(build_pdf_parser("pymupdf"), NullPdfParser)
+    picked = build_pdf_parser("pymupdf")
+    if importlib.util.find_spec("fitz") or importlib.util.find_spec("pymupdf"):
+        assert picked.__class__.__name__ == "PyMuPDFParser"
+    else:
+        # PyMuPDF not installed -> falls back to null rather than raising.
+        assert isinstance(picked, NullPdfParser)
 
 
 def test_pdf_pymupdf_live():

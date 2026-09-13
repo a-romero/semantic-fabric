@@ -14,8 +14,11 @@ Selected by ``CAPTION_BACKEND`` (``null`` default, ``llm`` in deployment).
 from __future__ import annotations
 
 import base64
+import logging
 import os
 from typing import Protocol
+
+logger = logging.getLogger(__name__)
 
 _PLACEHOLDER = "[figure: no caption available]"
 
@@ -50,7 +53,7 @@ class LLMCaptioner:
         prompt: str | None = None,
         api_base: str | None = None,
         api_key: str | None = None,
-        max_tokens: int = 200,
+        max_tokens: int | None = None,
     ) -> None:
         import litellm  # type: ignore
 
@@ -59,14 +62,13 @@ class LLMCaptioner:
         self._prompt = prompt or _DEFAULT_PROMPT
         self._api_base = api_base or os.getenv("LLM_API_BASE")
         self._api_key = api_key or os.getenv("LLM_API_KEY")
-        self._max_tokens = max_tokens
+        # A caption is short, but reasoning models (e.g. gpt-5.x) spend the budget on
+        # hidden reasoning tokens first — too small a cap yields empty output — so the
+        # default is generous and overridable.
+        self._max_tokens = max_tokens or int(os.getenv("CAPTION_MAX_TOKENS", "1024"))
 
-    def caption(self, *, image: bytes | None, provided: str | None) -> str:
-        # An author/layout-supplied caption is cheaper and exact — prefer it.
-        if provided and provided.strip():
-            return provided.strip()
-        if not image:
-            return _PLACEHOLDER
+    def _complete(self, image: bytes) -> str:
+        """Call the vision model and return its text. Raises on API error (no swallow)."""
         b64 = base64.b64encode(image).decode()
         kwargs: dict = {"model": self.model, "max_tokens": self._max_tokens,
                         "messages": [{
@@ -81,11 +83,24 @@ class LLMCaptioner:
             kwargs["api_base"] = self._api_base
         if self._api_key:
             kwargs["api_key"] = self._api_key
-        try:
-            resp = self._litellm.completion(**kwargs)
-            text = (resp.choices[0].message.content or "").strip()
-        except Exception:
+        resp = self._litellm.completion(**kwargs)
+        return (resp.choices[0].message.content or "").strip()
+
+    def caption(self, *, image: bytes | None, provided: str | None) -> str:
+        # An author/layout-supplied caption is cheaper and exact — prefer it.
+        if provided and provided.strip():
+            return provided.strip()
+        if not image:
             return _PLACEHOLDER
+        try:
+            text = self._complete(image)
+        except Exception as exc:
+            # Ingestion must not crash on a caption failure — fall back, but say why.
+            logger.warning("VLM caption call failed (%s); using placeholder.", exc)
+            return _PLACEHOLDER
+        if not text:
+            logger.warning("VLM caption returned empty content (raise CAPTION_MAX_TOKENS "
+                           "for reasoning models); using placeholder.")
         return text or _PLACEHOLDER
 
 

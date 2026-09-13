@@ -22,11 +22,21 @@ _IMG_B64 = base64.b64encode(b"\x89PNG\r\n\x1a\n fake").decode()
 _PLACEHOLDER = "[figure: no caption available]"
 
 
+def _have_litellm() -> bool:
+    import importlib.util
+
+    return importlib.util.find_spec("litellm") is not None
+
+
 def test_null_captioner_and_factory():
     assert build_captioner(None).caption(image=None, provided=None) == _PLACEHOLDER
     assert build_captioner(None).caption(image=None, provided="Given") == "Given"
-    # litellm not installed here -> factory falls back to the null captioner.
-    assert isinstance(build_captioner("llm"), NullCaptioner)
+    # build("llm") -> LLMCaptioner where litellm is installed, else null fallback.
+    picked = build_captioner("llm")
+    if _have_litellm():
+        assert picked.__class__.__name__ == "LLMCaptioner"
+    else:
+        assert isinstance(picked, NullCaptioner)
 
 
 def test_ingestion_captions_uncaptioned_figures_via_injected_captioner():
@@ -62,9 +72,12 @@ def test_llm_captioner_live():
     pytest.importorskip("litellm")
     from ingest.vlm import LLMCaptioner
 
-    # A 1x1 red PNG (valid image bytes) so a real vision model has something to look at.
-    red_dot = base64.b64decode(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    # An 8x8 red PNG (valid image bytes) so a real vision model has something to look at.
+    red = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAFElEQVR4nGP8z8Dwn4EIwDiqkL4KAV"
+        "6eAgVHwn9wAAAAAElFTkSuQmCC"
     )
-    cap = LLMCaptioner().caption(image=red_dot, provided=None)
-    assert cap and cap != "[figure: no caption available]"
+    # Use _complete (no swallow) so a real API error surfaces in the test instead of
+    # being masked as the placeholder.
+    cap = LLMCaptioner()._complete(red)
+    assert cap, "vision model returned empty output (raise CAPTION_MAX_TOKENS?)"
