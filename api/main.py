@@ -10,6 +10,8 @@ Run: uvicorn api.main:app --reload --port 8080
 
 from __future__ import annotations
 
+import os
+
 from fabric_client.models import (
     CONTRACT_VERSION,
     Decision,
@@ -26,9 +28,10 @@ from fastapi import FastAPI
 
 from ingest.markdown import ingest_markdown_tree
 from ingest.pdf import ingest_pdf_batch
+from reasoning.engine import ReasoningRequest, Rule
 
 from . import stubs
-from .state import get_index, get_kb, get_object_store, get_provenance
+from .state import get_index, get_kb, get_object_store, get_provenance, get_reasoning
 
 app = FastAPI(
     title="semantic-fabric",
@@ -110,7 +113,15 @@ def job(job_id: str) -> IngestJob:
 # -- reasoning / decisions ---------------------------------------------------
 @app.post("/reason", response_model=ReasonResponse)
 def reason(req: ReasonRequest) -> ReasonResponse:
-    return stubs.stub_reason(req.query)
+    # Gated so the deterministic layer can be rolled out without destabilizing callers.
+    if os.getenv("ENABLE_REASONING", "true").strip().lower() in {"0", "false", "no"}:
+        return ReasonResponse(answer="Reasoning is disabled (ENABLE_REASONING=false).")
+    rreq = ReasoningRequest(
+        query=req.query,
+        facts=list(req.facts),
+        rules=[Rule(name=r.name, body=list(r.body), head=r.head) for r in req.rules],
+    )
+    return get_reasoning().reason(rreq)
 
 
 @app.post("/decisions")

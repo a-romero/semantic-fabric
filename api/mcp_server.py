@@ -65,9 +65,20 @@ def build_server():  # noqa: ANN201 - FastMCP type optional at import time
         return stubs.stub_ingest_job().model_dump()
 
     @mcp.tool()
-    def reason(query: str) -> dict:
-        """Deterministic reasoning over the semantic layer."""
-        return stubs.stub_reason(query).model_dump()
+    def reason(query: str, facts: list[str] | None = None,
+               rules: list[dict] | None = None) -> dict:
+        """Deterministic, explainable reasoning. rules: [{name, body:[...], head}]."""
+        from reasoning.engine import ReasoningRequest, Rule
+
+        from .state import get_reasoning
+
+        rreq = ReasoningRequest(
+            query=query,
+            facts=facts or [],
+            rules=[Rule(name=r.get("name", "rule"), body=r.get("body", []), head=r["head"])
+                   for r in (rules or [])],
+        )
+        return get_reasoning().reason(rreq).model_dump()
 
     @mcp.tool()
     def record_decision(scenario: str, outcome: str, evidence: list[str] | None = None) -> dict:

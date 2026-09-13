@@ -13,12 +13,14 @@ import os
 from ingest.object_store import InMemoryObjectStore, ObjectStore
 from kb.store import KBStore
 from provenance.store import ProvenanceStore, build_provenance_store
+from reasoning.engine import ReasoningEngine, build_reasoning_engine
 from retrieval.index import RetrievalIndex, build_index_from_env
 
 _index: RetrievalIndex | None = None
 _kb: KBStore | None = None
 _object_store: ObjectStore | None = None
 _provenance: ProvenanceStore | None = None
+_reasoning: ReasoningEngine | None = None
 
 
 def get_index() -> RetrievalIndex:
@@ -67,3 +69,15 @@ def get_provenance() -> ProvenanceStore:
 def set_provenance(store: ProvenanceStore) -> None:
     global _provenance
     _provenance = store
+
+
+def get_reasoning() -> ReasoningEngine:
+    global _reasoning
+    if _reasoning is None:
+        _reasoning = build_reasoning_engine(os.getenv("REASONING_BACKEND"))
+    return _reasoning
+
+
+def set_reasoning(engine: ReasoningEngine) -> None:
+    global _reasoning
+    _reasoning = engine

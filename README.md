@@ -14,13 +14,14 @@ skilled-agent's `docs/SEMANTICA_SEPARATION_DESIGN.md` and
 > **Status: Phase 3 in progress (provenance + decisions).** Real and wired: `/search`
 > (hybrid vector + BM25, RRF-fused), `/graph/expand` (GraphRAG), `/ingest` for
 > `markdown_tree` **and** `pdf_batch`, the `generated/` + `authored/` KB namespaces,
-> and now **`/decisions`** — each agent answer is recorded as a decision derived from
-> the evidence it cited, with a tamper-evident hash chain, and `GET /decisions/{id}/chain`
-> returns the transitive lineage ("why did the agent conclude this, from what?").
-> Runs on pure-Python defaults out of the box; `.[prod]` swaps in Qdrant + BGE-M3, and
-> `.[semantica]` swaps the provenance backend for real W3C PROV-O (see ADR 0001).
-> Reasoning (`/reason`) and SHACL policy gates are the next Phase 3 steps; a real PDF
-> layout parser, VLM captioner, and LLM-backed extraction remain pluggable layers.
+> **`/decisions`** (each agent answer recorded as a decision derived from its cited
+> evidence, tamper-evident hash chain, `GET /decisions/{id}/chain` for transitive
+> lineage), and **`/reason`** — deterministic, explainable inference that returns a
+> rule trace ("Given …, we conclude … using rule 'R1'."). Runs on pure-Python defaults
+> out of the box; `.[prod]` swaps in Qdrant + BGE-M3, `.[semantica]` swaps in real
+> W3C PROV-O provenance and Datalog reasoning (see ADR 0001). The SHACL policy gate is
+> the next Phase 3 step; a real PDF layout parser, VLM captioner, and LLM-backed
+> extraction remain pluggable layers.
 
 ## The boundary
 

@@ -115,9 +115,19 @@ class IngestJob(BaseModel):
     detail: str | None = None
 
 
+class ReasonRule(BaseModel):
+    """A Horn rule: all `body` atoms present -> derive `head`."""
+
+    name: str = "rule"
+    body: list[str] = Field(default_factory=list)
+    head: str
+
+
 class ReasonRequest(BaseModel):
-    query: str
-    ruleset: str | None = None
+    query: str = Field("", description="Atom to prove/derive, e.g. 'Insurable(motor_policy)'")
+    facts: list[str] = Field(default_factory=list, description="Known ground atoms")
+    rules: list[ReasonRule] = Field(default_factory=list)
+    ruleset: str | None = Field(None, description="Named server-side ruleset (optional)")
 
 
 class ReasonResponse(BaseModel):

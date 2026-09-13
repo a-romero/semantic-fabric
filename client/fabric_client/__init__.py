@@ -17,6 +17,7 @@ from .models import (
     Provenance,
     ReasonRequest,
     ReasonResponse,
+    ReasonRule,
     SearchRequest,
     SearchResponse,
 )
@@ -36,6 +37,7 @@ __all__ = [
     "Provenance",
     "ReasonRequest",
     "ReasonResponse",
+    "ReasonRule",
     "SearchRequest",
     "SearchResponse",
 ]

@@ -40,11 +40,13 @@ def fresh_index():
     from ingest.object_store import InMemoryObjectStore
     from kb.store import KBStore
     from provenance.store import InMemoryProvenanceStore
+    from reasoning.engine import SimpleForwardChainer
 
     state.set_index(RetrievalIndex(HashingEmbedder(), InMemoryVectorStore()))
     state.set_kb(KBStore())
     state.set_object_store(InMemoryObjectStore())
     state.set_provenance(InMemoryProvenanceStore())
+    state.set_reasoning(SimpleForwardChainer())
     yield
 
 
