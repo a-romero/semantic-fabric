@@ -354,6 +354,17 @@ claude mcp add semantic-fabric -e FABRIC_URL=http://localhost:8080 -- python -m 
 (The in-process `api/mcp_server.py` remains for co-located deployments.) See
 [`demo/RUNBOOK.md`](demo/RUNBOOK.md) §7b.
 
+**Browse the content (web UI).** `explorer/` is a separate, read-only web service (in the
+platform guide's look-and-feel) to see what's in the fabric — Overview, Knowledge base
+(rendered Markdown), Knowledge graph (entities/relations + entity detail), and Search. It
+proxies the fabric's read API, so the browser is same-origin (no CORS):
+
+```bash
+FABRIC_URL=http://localhost:8080 uvicorn explorer.server:app --port 8090   # open :8090
+```
+
+See [`explorer/README.md`](explorer/README.md).
+
 ---
 
 ## 8. On semantica & the graph model
