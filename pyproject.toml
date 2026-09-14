@@ -53,6 +53,6 @@ target-version = "py311"
 select = ["E", "F", "I"]
 
 [tool.ruff.lint.per-file-ignores]
-# The demo report embeds a dense CSS blob as a string literal; long lines there are
-# intentional and not worth wrapping.
+# These embed HTML/CSS content as string literals; long lines there are intentional.
 "demo/run_demo.py" = ["E501"]
+"scripts/build_guide.py" = ["E501"]

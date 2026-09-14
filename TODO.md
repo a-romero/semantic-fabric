@@ -154,3 +154,37 @@ via semantica's `ProvenanceManager(storage_path=…)`; decision ids are UUIDs so
 unique across restarts. `/decisions/{id}/chain` survives a restart. (The dependency-free
 in-memory provenance default remains process-scoped, like the in-memory graph/retrieval
 defaults.) Opt-in test: `test_semantica_provenance_persists_across_restart`.
+
+## Deferred: provenance hash chain reports verified=False (semantica, on-env)
+
+**Status:** open — observed on a real run (`PROVENANCE_BACKEND=semantica`, persistent).
+
+A recorded decision's chain came back `verified=False` from `/decisions/{id}/chain` on the
+user's environment, while everything else on the semantica path works. Likely causes to
+check (in order): how `SemanticaProvenanceStore._interpret_verify` reads the dict that
+`ProvenanceManager.verify_chain()` returns on 0.6.8 (our probe never captured the exact
+keys); whether persistence (`storage_path`) changes what `verify_chain()` checks; or a
+genuine chain break from how we `track_entity` / `track_relationship`.
+
+Next step (no guessing): extend `scripts/inspect_semantica_graph.py` to record a couple
+of entities + a decision against a `storage_path` store and print the raw
+`verify_chain()` return (type + keys + values), then fix `_interpret_verify` (or the
+tracking calls) to match. Add an assertion to
+`test_semantica_provenance_persists_across_restart` once the true shape is known.
+
+## Deferred: tighten extraction quality (reduce low-value entities)
+
+**Status:** enhancement — observed on a real 5.6k-entity run.
+
+LLM extraction pulls many low-value entities (phone numbers, monetary amounts, long
+sentence-fragments as relation objects), which dilute the graph. The degree-ranked demo
+visualization already hides most of this noise, but the underlying graph would be higher
+quality with:
+- a tighter `extraction/extractor.py` system prompt — prefer canonical noun-phrase
+  entities and short snake_case predicates; explicitly exclude phone numbers, raw
+  amounts, and full-sentence objects;
+- an optional light post-filter — drop entities that are pure numbers/contact strings,
+  cap object length, de-duplicate near-identical names;
+- keep it provider-agnostic and schema-validated as today.
+Validate with the live extraction test (`EXTRACTION_LIVE=1`) on a sample page and eyeball
+entity/relation quality before/after.
