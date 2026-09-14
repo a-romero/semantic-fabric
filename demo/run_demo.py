@@ -358,26 +358,70 @@ def _tree(pages: list[dict]) -> str:
     return f'<ul class="tree">{items}</ul>' if items else '<p class="muted">No pages.</p>'
 
 
-def _graph_svg(snapshot: dict, max_nodes: int = 24) -> str:
-    import math
+def _short(s: str, n: int = 26) -> str:
+    s = str(s)
+    return s if len(s) <= n else s[: n - 1] + "…"
 
-    entities = snapshot.get("entities", [])[:max_nodes]
-    names = {e["name"] for e in entities}
-    relations = [r for r in snapshot.get("relations", [])
-                 if r["subject"] in names and r["object"] in names]
-    if not entities:
+
+def _graph_svg(snapshot: dict, max_nodes: int = 26, max_edges: int = 32) -> str:
+    """A CONNECTED sample of the graph: the most-central entities and the relations
+    among them. A real corpus has thousands of entities, most of them peripheral —
+    drawing an arbitrary slice shows disconnected dots, so we rank by degree and grow a
+    connected subgraph from the highest-degree relations."""
+    import math
+    from collections import Counter
+
+    all_entities = snapshot.get("entities", [])
+    all_relations = snapshot.get("relations", [])
+    if not all_entities:
         return ('<p class="muted">No entities in the graph yet — start the service with '
                 '<code>EXTRACTION_ON_INGEST=true</code> and an extraction model to populate '
                 'the knowledge graph.</p>')
-    # fixed-order categorical colour by type (<=3 types + Other), labels on every node
+
+    ent_by_name = {e["name"]: e for e in all_entities}
+    # degree over relations whose endpoints are both real entities
+    deg: Counter = Counter()
+    valid_rels = []
+    for r in all_relations:
+        s, o = r.get("subject"), r.get("object")
+        if s in ent_by_name and o in ent_by_name and s != o:
+            deg[s] += 1
+            deg[o] += 1
+            valid_rels.append(r)
+
+    # Grow a connected subgraph from the most central relations.
+    valid_rels.sort(key=lambda r: deg[r["subject"]] + deg[r["object"]], reverse=True)
+    chosen_names: set[str] = set()
+    chosen_rels: list[dict] = []
+    for r in valid_rels:
+        if len(chosen_rels) >= max_edges:
+            break
+        pair = {r["subject"], r["object"]}
+        if chosen_names and len(chosen_names | pair) > max_nodes:
+            continue
+        chosen_names |= pair
+        chosen_rels.append(r)
+
+    if not chosen_rels:
+        # No relations connect any entities — fall back to the top entities by page count.
+        top = sorted(all_entities, key=lambda e: len(e.get("pages", [])), reverse=True)
+        entities = top[:max_nodes]
+        note = (f'<p class="muted small">No connected relations to draw; showing the '
+                f'{len(entities)} entities mentioned on the most pages.</p>')
+    else:
+        entities = [ent_by_name[n] for n in chosen_names]
+        note = (f'<p class="muted small">Showing the {len(entities)} most-connected of '
+                f'{len(all_entities):,} entities and {len(chosen_rels)} of '
+                f'{len(all_relations):,} relations. Hover a node or edge for detail.</p>')
+
     types = []
     for e in entities:
         if e["type"] not in types:
             types.append(e["type"])
     color = {t: (_PALETTE[i] if i < len(_PALETTE) else _OTHER) for i, t in enumerate(types)}
 
-    W, H, cx, cy = 720, 460, 360, 230
-    R = 175
+    W, H, cx, cy = 760, 520, 380, 260
+    R = 200
     n = len(entities)
     pos = {}
     for i, e in enumerate(entities):
@@ -385,14 +429,15 @@ def _graph_svg(snapshot: dict, max_nodes: int = 24) -> str:
         pos[e["name"]] = (cx + R * math.cos(ang), cy + R * math.sin(ang))
 
     edges = ""
-    for r in relations:
+    for r in chosen_rels:
         x1, y1 = pos[r["subject"]]
         x2, y2 = pos[r["object"]]
         mx, my = (x1 + x2) / 2, (y1 + y2) / 2
         edges += (f'<line x1="{x1:.0f}" y1="{y1:.0f}" x2="{x2:.0f}" y2="{y2:.0f}" '
                   f'class="edge" marker-end="url(#arrow)"><title>{_esc(r["subject"])} '
                   f'{_esc(r["predicate"])} {_esc(r["object"])}</title></line>'
-                  f'<text x="{mx:.0f}" y="{my:.0f}" class="edge-l">{_esc(r["predicate"])}</text>')
+                  f'<text x="{mx:.0f}" y="{my:.0f}" class="edge-l">'
+                  f'{_esc(_short(r["predicate"], 18))}</text>')
     nodes = ""
     for e in entities:
         x, y = pos[e["name"]]
@@ -400,14 +445,14 @@ def _graph_svg(snapshot: dict, max_nodes: int = 24) -> str:
         dx = 12 if x >= cx else -12
         nodes += (f'<circle cx="{x:.0f}" cy="{y:.0f}" r="7" fill="{color[e["type"]]}" '
                   f'class="node"><title>{_esc(e["name"])} ({_esc(e["type"])}) — '
-                  f'{len(e.get("pages", []))} page(s)</title></circle>'
+                  f'{len(e.get("pages", []))} page(s), degree {deg[e["name"]]}</title></circle>'
                   f'<text x="{x + dx:.0f}" y="{y + 4:.0f}" text-anchor="{anchor}" '
-                  f'class="node-l">{_esc(e["name"])}</text>')
+                  f'class="node-l">{_esc(_short(e["name"], 24))}</text>')
     legend = "".join(
         f'<span class="lg"><span class="sw" style="background:{color[t]}"></span>'
         f'{_esc(t)}</span>' for t in types
     )
-    return (f'<div class="legend">{legend}</div>'
+    return (f'{note}<div class="legend">{legend}</div>'
             f'<svg viewBox="0 0 {W} {H}" class="graph" role="img" '
             f'aria-label="Knowledge graph of entities and relations">'
             f'<defs><marker id="arrow" viewBox="0 0 10 10" refX="16" refY="5" '
