@@ -124,9 +124,15 @@ FABRIC_DB=./fabric.db GRAPH_STORE=rdf GRAPH_DB_PATH=./graph-oxigraph \
 
 `FABRIC_DB` is a SQLite sidecar that persists the retrieval chunks (with their vectors)
 and the KB pages; on startup the index rebuilds and `/search`, `/kb` and `--no-ingest`
-work immediately against the previously ingested corpus. Without `FABRIC_DB` the
-retrieval index + KB are in-memory (the default) and a restart needs a re-ingest — the
-fast structural pass in §9 makes that quick.
+work immediately against the previously ingested corpus. With
+`PROVENANCE_BACKEND=semantica` the **decision lineage** (PROV-O + hash chain) also
+persists (to `<FABRIC_DB>.prov.db`, or `PROVENANCE_DB`), so `/decisions/{id}/chain`
+survives a restart too. Without `FABRIC_DB` the retrieval index + KB are in-memory (the
+default) and a restart needs a re-ingest — the fast structural pass in §9 makes that
+quick.
+
+So the full durable set is: `GRAPH_STORE=rdf` (graph) + `FABRIC_DB` (retrieval + KB +,
+with the semantica provenance backend, decision lineage).
 
 ---
 
@@ -158,7 +164,9 @@ export REASONING_BACKEND=semantica PROVENANCE_BACKEND=semantica ONTOLOGY_VALIDAT
 # persistent, SPARQL-native RDF graph (survives restarts, SPARQL-queryable)
 export GRAPH_STORE=rdf GRAPH_DB_PATH=./graph-oxigraph
 
-# persist the retrieval index + KB too, so /search and /kb survive a restart (no re-ingest)
+# persist the retrieval index + KB too, so /search and /kb survive a restart (no re-ingest).
+# With PROVENANCE_BACKEND=semantica this also persists decision lineage to a sibling
+# SQLite file (<FABRIC_DB>.prov.db); override with PROVENANCE_DB if you want it elsewhere.
 export FABRIC_DB=./fabric.db
 
 # PDF layout parsing + figure captioning

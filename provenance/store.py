@@ -151,13 +151,24 @@ class InMemoryProvenanceStore:
 
 
 def build_provenance_store(kind: str | None) -> ProvenanceStore:
-    """Factory from PROVENANCE_BACKEND. Falls back to in-memory if semantica is absent."""
+    """Factory from PROVENANCE_BACKEND. Falls back to in-memory if semantica is absent.
+
+    When the semantica backend is selected, decision lineage persists across restarts to
+    a SQLite file: ``PROVENANCE_DB`` if set, else derived from ``FABRIC_DB`` (a sibling
+    ``.prov.db``). Without either it runs in-process (the CI/default behaviour).
+    """
+    import os
+
     choice = (kind or "memory").strip().lower()
     if choice == "semantica":
         try:
             from .semantica_backend import SemanticaProvenanceStore
 
-            return SemanticaProvenanceStore()
+            db = os.getenv("PROVENANCE_DB")
+            if not db and os.getenv("FABRIC_DB"):
+                from pathlib import Path
+                db = str(Path(os.getenv("FABRIC_DB")).with_suffix(".prov.db"))
+            return SemanticaProvenanceStore(storage_path=db)
         except Exception:  # not installed / import failure -> safe fallback
             return InMemoryProvenanceStore()
     return InMemoryProvenanceStore()

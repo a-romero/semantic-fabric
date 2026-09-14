@@ -147,3 +147,10 @@ immediately after a restart with no re-ingest. In-memory stays the default (no
 `FABRIC_DB` → previous behaviour). The knowledge graph persists separately via
 `GRAPH_STORE=rdf`. Verified by `tests/test_persistence.py` and an end-to-end
 ingest → restart → query check.
+
+**Provenance too:** with `PROVENANCE_BACKEND=semantica`, decision lineage (PROV-O +
+chain) persists to a SQLite file — `PROVENANCE_DB`, or a sibling `<FABRIC_DB>.prov.db` —
+via semantica's `ProvenanceManager(storage_path=…)`; decision ids are UUIDs so they stay
+unique across restarts. `/decisions/{id}/chain` survives a restart. (The dependency-free
+in-memory provenance default remains process-scoped, like the in-memory graph/retrieval
+defaults.) Opt-in test: `test_semantica_provenance_persists_across_restart`.

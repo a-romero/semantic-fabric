@@ -15,6 +15,7 @@ Adapter surface preserved for the rest of the service:
 from __future__ import annotations
 
 import urllib.parse
+import uuid
 from typing import Any
 
 from fabric_client.models import Decision
@@ -33,22 +34,25 @@ def _uri_safe(s: str) -> str:
 
 
 class SemanticaProvenanceStore:
-    def __init__(self) -> None:
+    def __init__(self, storage_path: str | None = None) -> None:
         # Import lazily so the module only hard-requires semantica when actually used.
         from semantica.provenance import ProvenanceManager  # type: ignore
 
-        # 0.6.8's ctor takes an optional storage_path (in-memory when omitted). Be
-        # defensive across point releases: fall back to an explicit in-memory store.
-        try:
-            self._pm = ProvenanceManager()
-        except TypeError:
+        # With a storage_path the ProvenanceManager persists (SQLite) so decision lineage
+        # survives a restart; without one it's in-process. Be defensive across point
+        # releases about the exact in-memory ctor shape.
+        if storage_path:
+            self._pm = ProvenanceManager(storage_path=storage_path)
+        else:
             try:
-                from semantica.provenance import InMemoryStorage  # type: ignore
+                self._pm = ProvenanceManager()
+            except TypeError:
+                try:
+                    from semantica.provenance import InMemoryStorage  # type: ignore
 
-                self._pm = ProvenanceManager(storage=InMemoryStorage())
-            except Exception:
-                self._pm = ProvenanceManager(storage_path=":memory:")
-        self._decision_seq = 0
+                    self._pm = ProvenanceManager(storage=InMemoryStorage())
+                except Exception:
+                    self._pm = ProvenanceManager(storage_path=":memory:")
 
     # -- entities / derivation -------------------------------------------------
 
@@ -89,8 +93,9 @@ class SemanticaProvenanceStore:
         return entity_id
 
     def record_decision(self, decision: Decision) -> dict:
-        self._decision_seq += 1
-        decision_id = f"decision-{self._decision_seq}"
+        # A UUID id, not a counter — so ids stay unique across restarts when the store
+        # is persistent (a reset counter would collide with a prior run's decision).
+        decision_id = f"decision-{uuid.uuid4().hex[:12]}"
         self._pm.track_entity(
             decision_id, _uri_safe(decision.scenario or decision_id),
             metadata={

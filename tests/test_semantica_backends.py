@@ -36,6 +36,24 @@ def test_semantica_provenance_prov_o_and_chain():
     assert chain.get("prov_o"), "expected a non-empty PROV-O export"
 
 
+def test_semantica_provenance_persists_across_restart(tmp_path):
+    # A decision recorded with a storage_path is still traceable + verifiable from a
+    # fresh store over the same DB (i.e. it survives a service restart).
+    db = str(tmp_path / "prov.db")
+    s1 = SemanticaProvenanceStore(storage_path=db)
+    s1.record_entity("report-q3.pdf#p12", kind="evidence",
+                     attrs={"source_id": "report-q3.pdf"})
+    rec = s1.record_decision(
+        Decision(scenario="Q3 revenue?", outcome="4.2", evidence=["report-q3.pdf#p12"])
+    )
+    assert rec["recorded"] is True
+
+    s2 = SemanticaProvenanceStore(storage_path=db)  # fresh instance, same DB
+    chain = s2.trace_chain(rec["decision_id"])
+    assert chain["verified"] is True
+    assert chain.get("prov_o"), "persisted PROV-O should be non-empty after reload"
+
+
 def test_semantica_reasoning_forward_chain_with_explanation():
     eng = SemanticaReasoningEngine()
     res = eng.reason(ReasoningRequest(
