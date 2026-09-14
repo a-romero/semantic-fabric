@@ -340,6 +340,20 @@ re-ingest. See [`demo/RUNBOOK.md`](demo/RUNBOOK.md) §4 and §9.
 | Decisions & lineage | `POST /decisions`, `GET /decisions/{id}/chain` | — |
 | SHACL policy gate | `POST /validate` | — |
 
+**Query from an agent (MCP).** `fabric_mcp/` is a standalone, query-focused MCP server: an
+agent (Claude Code, Cursor, …) points at a running fabric over HTTP and drives the query
+cycle — no fabric backends needed on the agent side. Its `fabric_answer` tool runs the
+whole cycle in one call (retrieve → graph-expand → record decision → lineage) and returns
+evidence + related pages + decision + provenance:
+
+```bash
+pip install -e ".[mcp]"
+claude mcp add semantic-fabric -e FABRIC_URL=http://localhost:8080 -- python -m fabric_mcp
+```
+
+(The in-process `api/mcp_server.py` remains for co-located deployments.) See
+[`demo/RUNBOOK.md`](demo/RUNBOOK.md) §7b.
+
 ---
 
 ## 8. On semantica & the graph model

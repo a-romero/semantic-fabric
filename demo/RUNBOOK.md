@@ -233,8 +233,35 @@ DEC=$(curl -s localhost:8080/decisions -d '{"scenario":"q","outcome":"a","eviden
 curl -s localhost:8080/decisions/$DEC/chain                                               # PROV-O lineage
 ```
 
-The same capabilities are also exposed as **MCP tools** (`search`, `graph_query`,
-`extract`, `reason`, `ingest`, …) for agent/IDE clients — see `api/mcp_server.py`.
+The same capabilities are also exposed as **MCP tools** — see the next section.
+
+---
+
+## 7b. Query from an agent (MCP)
+
+`fabric_mcp/` is a **standalone, query-focused MCP server** so an agent (Claude Code,
+Cursor, …) can drive the fabric directly. It assumes the fabric is already running with
+data ingested, and proxies the query surface over HTTP — the agent only needs `mcp` +
+Python, not the fabric's backends.
+
+The headline tool is **`fabric_answer`**, which runs the *whole* cycle in one call —
+retrieve → graph-expand → record a decision → fetch its provenance lineage — and returns
+`{question, evidence[], related[], decision, lineage, guidance}`, everything the agent
+needs to answer with citations and an audit trail. Other tools: `fabric_search`,
+`fabric_graph_expand`, `fabric_reason`, `fabric_validate`, `fabric_record_decision`,
+`fabric_decision_chain`, `fabric_read_page`, `fabric_graph_snapshot`, `fabric_health`.
+
+```bash
+pip install -e ".[mcp]"                 # mcp (v1) client library
+# with the fabric running on :8080 (data already ingested):
+claude mcp add semantic-fabric -e FABRIC_URL=http://localhost:8080 -- python -m fabric_mcp
+```
+
+Then, in Claude Code, just ask a knowledge question — the agent calls `fabric_answer`,
+reads the returned evidence (each with `provenance.locator`), and answers with citations;
+`decision`/`lineage` give the audit trail. Run it by hand with
+`FABRIC_URL=http://localhost:8080 python -m fabric_mcp` (stdio). Ingestion is intentionally
+**not** exposed here — keep it a separate, deliberate step.
 
 ---
 
