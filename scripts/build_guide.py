@@ -127,6 +127,21 @@ ul.crosses li::before{content:"→";color:var(--accent)}
 .dg-swap .d{color:var(--muted)} .dg-swap .p{color:var(--accent-ink);font-weight:650}
 @media (max-width:720px){.dg-flow{flex-direction:column}.dg-arrow{flex-basis:auto;padding:2px 0}
   .dg-arrow .g{transform:rotate(90deg)}}
+
+/* function-level pipeline diagram */
+.dg2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0}
+.dg-col{background:var(--surface-2);border:1px solid var(--line);border-radius:14px;
+  padding:14px 13px;border-top:3px solid var(--s1)}
+.dg-col.ingest{border-top-color:var(--s2)}
+.dg-col h5{margin:0 0 2px;font-size:13px;font-weight:700}
+.dg-col .lead{margin:0 0 10px;font-size:11.5px;color:var(--muted);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.dg-step{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+.dg-step .fn{display:block;font:11px ui-monospace,SFMono-Regular,Menlo,monospace;
+  color:var(--accent-ink);margin-bottom:2px}
+.dg-step b{font-size:13.5px}
+.dg-step .cx{display:block;color:var(--muted);font-size:11.5px;margin-top:3px;line-height:1.45}
+@media (max-width:720px){.dg2{grid-template-columns:1fr}}
 .pilltype{background:var(--pill);color:var(--pill-ink);border-radius:6px;padding:1px 7px;
   font-size:12px;font-weight:600}
 @media (max-width:820px){
@@ -208,6 +223,60 @@ def diagram_integration() -> str:
         '<div class="dg-note">Same capabilities on both channels.</div></div>'
         '<div class="dg-arrow"><span class="g">▸</span></div>'
         f'<div class="dg-lane"><h5>Pluggable backends</h5>{backends}</div>'
+        '</div>'
+    )
+
+
+def _step(fn: str, title: str, cx: str) -> str:
+    return (f'<div class="dg-step"><span class="fn">{fn}</span><b>{title}</b>'
+            f'<span class="cx">{cx}</span></div>')
+
+
+def diagram_pipeline() -> str:
+    """Function-level view: how the components collaborate on ingest vs. query."""
+    ingest = '<div class="dg-vsep">▾</div>'.join([
+        _step("ingest_markdown_tree / ingest_pdf_batch", "Parse",
+              "Markdown as-is; PDFs via <b>pdf_parser</b> (PyMuPDF) → text · tables · "
+              "figures, then <b>vlm</b> captions figures"),
+        _step("chunk_page()", "Chunk", "split each page into retrievable passages"),
+        _step("index.add_chunks() → embedder.embed()", "Embed",
+              "passages → vectors (<b>BGE-M3</b> / hashing)"),
+        _step("extractor.extract() &nbsp;·&nbsp; EXTRACTION_CONCURRENCY", "Extract (concurrent)",
+              "LLM returns typed entities + relations per page"),
+        _step("apply_extraction() · add_entity/add_relation · vs.upsert · bm25.add",
+              "Index &amp; link",
+              "vectors → <b>vector store</b>, text → <b>BM25</b>, entities/relations + "
+              "hierarchy/topics → <b>graph</b>"),
+        _step("persistence.save_chunks / save_page · RDF store", "Persist",
+              "chunks + vectors, KB pages, RDF graph → survive restart"),
+    ])
+    query = '<div class="dg-vsep">▾</div>'.join([
+        _step("POST /search → index.search()", "Retrieve",
+              "embed query → <b>vector</b> + <b>BM25</b> → <b>RRF fuse</b> → ranked "
+              "EvidenceUnits with provenance"),
+        _step("POST /graph/expand → graph.expand()", "Expand (GraphRAG)",
+              "walk hierarchy · shared-topic · shared-entity · relation edges"),
+        _step("POST /reason (over_graph) → graph.facts() → Datalog", "Reason",
+              "KG facts + rules → derive answer + explanation trace"),
+        _step("POST /decisions → record_decision() → /chain", "Record &amp; trace",
+              "decision derived from cited evidence → <b>PROV-O</b> + hash chain lineage"),
+        _step("POST /validate → validator.validate()", "Gate (SHACL)",
+              "check entity data against constraints before release"),
+    ])
+    return (
+        '<div class="dg">'
+        '<div class="dg-band">API layer &nbsp;·&nbsp; REST + MCP → state.py routes to capabilities</div>'
+        '<div class="dg-vsep">▾</div>'
+        '<div class="dg2">'
+        f'<div class="dg-col ingest"><h5>① Ingest pipeline</h5>'
+        f'<p class="lead">POST /ingest (write path)</p>{ingest}</div>'
+        f'<div class="dg-col"><h5>② Query &amp; reasoning</h5>'
+        f'<p class="lead">ask (read path)</p>{query}</div>'
+        '</div>'
+        '<div class="dg-vsep">▾ &nbsp; writes ▾ &nbsp;&nbsp; ▲ reads &nbsp; ▲</div>'
+        '<div class="dg-band storage">Shared stores &nbsp;'
+        '<small>vector store · BM25 · chunk store · knowledge graph (RDF) · KB pages · '
+        'provenance — written on ingest, read on query</small></div>'
         '</div>'
     )
 
@@ -367,6 +436,14 @@ without code changes.</p>
 <tr><td><strong>Persistence</strong></td><td>Keeps index/KB/lineage across restarts.</td><td>process memory</td><td>SQLite (<code>FABRIC_DB</code>) + RDF store</td></tr>
 </tbody>
 </table>
+
+<h3>How the components work together (function level)</h3>
+<p class="section-lede">The same modules play two roles. On <strong>ingest</strong> they
+build and persist the stores; on a <strong>query</strong> they read those stores to
+retrieve, reason, prove and gate. Each step names the function or endpoint that drives it.</p>
+{diagram_pipeline()}
+<p class="figcap">Ingest writes the shared stores; query reads them. Function/endpoint
+names shown on each step.</p>
 
 <h2 id="flow">End-to-end flow</h2>
 <p class="section-lede">Two phases: ingest a corpus once, then ask questions
