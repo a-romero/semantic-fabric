@@ -92,6 +92,41 @@ ul.checks{list-style:none;padding:0}ul.checks li{padding:5px 0 5px 26px;position
 ul.checks li::before{content:"✓";position:absolute;left:0;color:var(--good);font-weight:700}
 ul.crosses li::before{content:"→";color:var(--accent)}
 .foot{margin:60px 0 0;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+
+/* native diagrams */
+.dg{margin:18px 0}
+.dg-flow{display:flex;align-items:stretch;gap:6px;flex-wrap:nowrap}
+.dg-lane{flex:1 1 0;min-width:0;background:var(--surface-2);border:1px solid var(--line);
+  border-radius:14px;padding:14px 13px}
+.dg-lane.accent{background:var(--pill);border-color:color-mix(in srgb,var(--accent) 30%,var(--line))}
+.dg-lane h5{margin:0 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--faint)}
+.dg-node{background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:9px 11px;margin:8px 0;font-size:13.5px;font-weight:650}
+.dg-node small{display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px}
+.dg-arrow{flex:0 0 26px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  color:var(--faint);gap:5px}
+.dg-arrow .g{font-size:20px;line-height:1}
+.dg-arrow small{font-size:10px;text-align:center;color:var(--faint);line-height:1.25}
+.dg-note{font-size:11.5px;color:var(--muted);margin-top:8px;font-style:italic}
+.dg-stack{display:flex;flex-direction:column}
+.dg-band{background:var(--pill);color:var(--pill-ink);border:1px solid
+  color-mix(in srgb,var(--accent) 25%,var(--line));border-radius:11px;padding:12px 14px;
+  font-weight:650;text-align:center;font-size:14px}
+.dg-band.storage{background:var(--surface-2);color:var(--ink);border-color:var(--line)}
+.dg-band small{font-weight:400;color:var(--muted)}
+.dg-vsep{text-align:center;color:var(--faint);font-size:16px;margin:5px 0}
+.dg-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.dg-mod{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+  padding:12px 13px;border-top:3px solid var(--s1)}
+.dg-mod:nth-child(3n+2){border-top-color:var(--s2)}
+.dg-mod:nth-child(3n){border-top-color:var(--s3)}
+.dg-mod b{font-size:14px}
+.dg-mod .role{display:block;color:var(--muted);font-size:12.5px;margin:3px 0 9px;line-height:1.4}
+.dg-swap{font-size:11.5px;color:var(--muted)}
+.dg-swap .d{color:var(--muted)} .dg-swap .p{color:var(--accent-ink);font-weight:650}
+@media (max-width:720px){.dg-flow{flex-direction:column}.dg-arrow{flex-basis:auto;padding:2px 0}
+  .dg-arrow .g{transform:rotate(90deg)}}
 .pilltype{background:var(--pill);color:var(--pill-ink);border-radius:6px;padding:1px 7px;
   font-size:12px;font-weight:600}
 @media (max-width:820px){
@@ -141,6 +176,79 @@ def toc_html() -> str:
 
 def card(title: str, body: str) -> str:
     return f'<div class="card"><h4>{title}</h4><p>{body}</p></div>'
+
+
+def _node(name: str, sub: str = "") -> str:
+    s = f"<small>{sub}</small>" if sub else ""
+    return f'<div class="dg-node">{name}{s}</div>'
+
+
+def diagram_integration() -> str:
+    """High-level integration — HTML-native three-lane flow."""
+    consumers = "".join([
+        _node("skilled-agent", "RemoteFabricBackend"),
+        _node("MCP clients", "Claude Code · Cursor · IDEs"),
+        _node("Apps &amp; services", "over HTTP"),
+        _node("Batch jobs", "demo · CI · scheduled ingest"),
+    ])
+    backends = "".join([
+        _node("Retrieval", "in-memory ▸ Qdrant + BGE-M3"),
+        _node("Graph", "in-memory ▸ Oxigraph RDF"),
+        _node("Deterministic layers", "pure-Python ▸ semantica"),
+        _node("LLM gateway", "LiteLLM — any provider"),
+        _node("Persistence", "SQLite sidecar + object store"),
+    ])
+    return (
+        '<div class="dg dg-flow">'
+        f'<div class="dg-lane"><h5>Consumers</h5>{consumers}</div>'
+        '<div class="dg-arrow"><span class="g">▸</span>'
+        '<small>fabric-client<br>EvidenceUnit</small></div>'
+        '<div class="dg-lane accent"><h5>semantic-fabric</h5>'
+        f'{_node("REST API")}{_node("MCP server")}'
+        '<div class="dg-note">Same capabilities on both channels.</div></div>'
+        '<div class="dg-arrow"><span class="g">▸</span></div>'
+        f'<div class="dg-lane"><h5>Pluggable backends</h5>{backends}</div>'
+        '</div>'
+    )
+
+
+def _mod(name: str, role: str, default: str, prod: str) -> str:
+    return (f'<div class="dg-mod"><b>{name}</b><span class="role">{role}</span>'
+            f'<div class="dg-swap"><span class="d">{default}</span> ▸ '
+            f'<span class="p">{prod}</span></div></div>')
+
+
+def diagram_components() -> str:
+    """Component-level architecture — HTML-native layered stack."""
+    mods = "".join([
+        _mod("Ingestion", "Markdown + PDF layout (text/tables/figures), figure captions",
+             "markdown + pre-parsed", "PyMuPDF + LiteLLM vision"),
+        _mod("Extraction", "page text → typed entities + relations",
+             "off (no-op)", "LiteLLM (any provider)"),
+        _mod("Retrieval", "hybrid vector + BM25, RRF-fused, with provenance",
+             "in-memory + hashing", "Qdrant + BGE-M3"),
+        _mod("Graph", "knowledge graph + GraphRAG; SPARQL-queryable",
+             "in-memory", "Oxigraph (RDF)"),
+        _mod("Reasoning", "deterministic inference over the graph, with a trace",
+             "forward-chainer", "semantica Datalog"),
+        _mod("Provenance", "decisions + transitive lineage",
+             "in-memory chain", "semantica PROV-O"),
+        _mod("Ontology / policy", "validate entities against constraints",
+             "simple constraints", "pyshacl (SHACL)"),
+        _mod("Knowledge base", "authored + generated Markdown",
+             "in-memory", "SQLite (durable)"),
+    ])
+    return (
+        '<div class="dg dg-stack">'
+        '<div class="dg-band">API layer &nbsp;·&nbsp; REST + MCP '
+        '<small>(identical capabilities) · state wiring by env var</small></div>'
+        '<div class="dg-vsep">▾</div>'
+        f'<div class="dg-grid">{mods}</div>'
+        '<div class="dg-vsep">▾</div>'
+        '<div class="dg-band storage">Persistence &amp; storage &nbsp;'
+        '<small>SQLite sidecar (FABRIC_DB) · Oxigraph RDF (GRAPH_STORE) · object store</small>'
+        '</div></div>'
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +332,7 @@ and auditability matter.</p></div>
 <p class="section-lede">Front-ends stay lean. They speak to one service through one
 contract, and fall back to their own local search if the service is unreachable — so
 adopting the platform is an upgrade, never a hard dependency.</p>
-{svg("integration.svg")}
+{diagram_integration()}
 <p class="figcap">Consumers → the <code>fabric-client</code> contract → REST/MCP → pluggable backends.</p>
 <ul class="checks">
 <li><strong>skilled-agent</strong> and other apps call over HTTP via the tiny
@@ -243,7 +351,7 @@ consistent across every channel.</li>
 integration runs the defaults; the production backends are validated on a capable host.
 This is why the platform installs and runs in seconds, yet scales to real infrastructure
 without code changes.</p>
-{svg("components.svg")}
+{diagram_components()}
 <p class="figcap">Every module: its default backend and the production option it swaps in.</p>
 <table>
 <thead><tr><th>Component</th><th>What it does</th><th>Default</th><th>Production option</th></tr></thead>
