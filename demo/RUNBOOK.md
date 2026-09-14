@@ -252,13 +252,34 @@ needs to answer with citations and an audit trail. Other tools: `fabric_search`,
 `fabric_decision_chain`, `fabric_read_page`, `fabric_graph_snapshot`, `fabric_health`.
 
 ```bash
-pip install -e ".[mcp]"                 # mcp (v1) client library
-# with the fabric running on :8080 (data already ingested):
+pip install -e ".[mcp]"                 # mcp (v1) client library — do this in a venv
+```
+
+**Claude Code** — with the fabric running on :8080 (data already ingested):
+```bash
 claude mcp add semantic-fabric -e FABRIC_URL=http://localhost:8080 -- python -m fabric_mcp
 ```
 
-Then, in Claude Code, just ask a knowledge question — the agent calls `fabric_answer`,
-reads the returned evidence (each with `provenance.locator`), and answers with citations;
+**opencode** — add it to `opencode.json` (project root) or `~/.config/opencode/opencode.json`:
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "semantic-fabric": {
+      "type": "local",
+      "command": ["/abs/path/to/venv/bin/python", "-m", "fabric_mcp"],
+      "environment": { "FABRIC_URL": "http://localhost:8080" },
+      "enabled": true
+    }
+  }
+}
+```
+Use the **absolute** python path of the venv where you ran `pip install -e ".[mcp]"`, so
+`fabric_mcp` and `mcp` are importable regardless of opencode's working directory. opencode
+picks the tools up on restart; check with `/mcp`.
+
+Then, in either agent, just ask a knowledge question — it calls `fabric_answer`, reads the
+returned evidence (each with `provenance.locator`), and answers with citations;
 `decision`/`lineage` give the audit trail. Run it by hand with
 `FABRIC_URL=http://localhost:8080 python -m fabric_mcp` (stdio). Ingestion is intentionally
 **not** exposed here — keep it a separate, deliberate step.
