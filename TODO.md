@@ -188,3 +188,24 @@ quality with:
 - keep it provider-agnostic and schema-validated as today.
 Validate with the live extraction test (`EXTRACTION_LIVE=1`) on a sample page and eyeball
 entity/relation quality before/after.
+
+## Deferred: migrate MCP servers to mcp 2.x (MCPServer)
+
+**Status:** deferred — the `mcp` extra is pinned `<2` today.
+
+`pip install mcp` now resolves to **mcp 2.x**, which renamed `FastMCP` → `MCPServer`
+(`from mcp.server.mcpserver import MCPServer`) and changed related APIs. Both servers here
+target the v1 `FastMCP` surface:
+- `fabric_mcp/server.py` (standalone query proxy), and
+- `api/mcp_server.py` (in-process, co-located).
+
+So the `mcp` optional-dependency is pinned `mcp>=1.0,<2` to keep them running.
+
+If/when we migrate:
+- swap `from mcp.server.fastmcp import FastMCP` → the 2.x `MCPServer` import in both
+  files, and update tool registration / `run()` per the migration guide
+  (https://py.sdk.modelcontextprotocol.io/v2/migration/#fastmcp-renamed-to-mcpserver);
+- relax the pin to `mcp>=2`;
+- re-verify `python -m fabric_mcp` builds and lists all 10 tools, and that
+  `tests/test_mcp_query.py` (which is transport-only, no `mcp` import) still passes;
+- consider supporting both (try/except import) only if v1 clients must be kept.
