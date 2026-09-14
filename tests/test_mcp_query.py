@@ -60,6 +60,22 @@ def test_search_and_reason_over_graph(monkeypatch):
     assert "answer" in r
 
 
+def test_empty_index_diagnostic_when_graph_has_data(monkeypatch):
+    monkeypatch.setattr(fclient, "_call", _dispatch)
+    # Graph has entities/relations but the retrieval index is empty (the restart-without-
+    # FABRIC_DB symptom). Simulate by seeding only the graph, not the index.
+    idx = state.get_index()
+    idx.graph.add_entity("Aviva", "Org", page_path="p/index.md")
+    idx.graph.add_relation("Aviva", "offers", "ISA")
+
+    res = fclient.answer("anything at all")
+    assert res["evidence"] == []
+    diag = res["diagnostic"]
+    assert diag["graph_counts"]["relations"] >= 1
+    assert "FABRIC_DB" in diag["likely_cause"]
+    assert "Do NOT scan" in diag["do_not"]
+
+
 def test_errors_are_actionable(monkeypatch):
     # point at a dead port; the client raises a clear, hint-bearing error
     monkeypatch.setenv("FABRIC_URL", "http://127.0.0.1:1")

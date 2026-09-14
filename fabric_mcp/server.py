@@ -41,11 +41,12 @@ def build_server():  # noqa: ANN201 - FastMCP type is optional at import time
         evidence, pulls graph-connected context, records an auditable decision, and returns
         its provenance lineage — everything needed to answer with citations.
 
-        Returns {question, evidence[], related[], decision, lineage, guidance}. Each
-        evidence item carries `content` and `provenance.locator` (page/section, or PDF page
-        + bounding box) — cite those. Set record=false for a pure lookup with no audit
-        trail; narrow with section (a top-level KB folder). Assumes data is already
-        ingested and the fabric is running (FABRIC_URL).
+        Answer from the `content` of each evidence item and cite `path` + provenance.locator.
+        IMPORTANT: the `path` values are semantic-fabric KB references, NOT files on disk —
+        do NOT open them with file tools or scan the repository. To read a full page, call
+        fabric_read_page(namespace='authored', path=<path>). See the `how_to_use` field in
+        the result. Set record=false for a pure lookup; narrow with section (a top-level KB
+        folder). Assumes data is already ingested and the fabric is running (FABRIC_URL).
         """
         return _safe(client.answer, question, top_k=top_k, section=section or None,
                      expand=expand, record=record)
@@ -53,15 +54,19 @@ def build_server():  # noqa: ANN201 - FastMCP type is optional at import time
     @mcp.tool()
     def fabric_search(query: str, top_k: int = 5, section: str = "") -> object:
         """Hybrid retrieval (vector + BM25, RRF-fused). Returns ranked EvidenceUnits, each
-        with content, type, score and provenance (source + exact locator). Use for a plain
-        search; prefer fabric_answer for a full, audited answer."""
+        with `content` (answer from this), type, score and provenance (source + exact
+        locator). `path` is a KB reference, not a file — never read it from disk; use
+        fabric_read_page to fetch a full page. Prefer fabric_answer for a full, audited
+        answer. Empty result → the index may be unloaded; see fabric_answer's diagnostic."""
         return _safe(client.search, query, top_k=top_k, section=section or None)
 
     @mcp.tool()
     def fabric_graph_expand(seed: str, hops: int = 2) -> object:
         """GraphRAG: from a seed (a page path or an entity name) walk the knowledge graph
         (hierarchy, shared topics, shared entities, relations) to related pages that plain
-        search would miss."""
+        search would miss. Results are page REFERENCES (path + relation + short summary),
+        not file paths — to read a page's body call fabric_read_page(namespace, path); do
+        not open it from the filesystem."""
         return _safe(client.graph_expand, seed, hops=hops)
 
     @mcp.tool()
@@ -95,7 +100,10 @@ def build_server():  # noqa: ANN201 - FastMCP type is optional at import time
 
     @mcp.tool()
     def fabric_read_page(namespace: str, path: str) -> dict:
-        """Read a full KB page (namespace 'authored' or 'generated') by path."""
+        """Read a full KB page body from the fabric by KB reference — this is how you fetch
+        page content for a `path` returned by fabric_search/fabric_graph_expand (NOT the
+        local filesystem). namespace is 'authored' (human-curated) or 'generated'
+        (fabric-produced); default to 'authored'."""
         return _safe(client.read_page, namespace, path)
 
     @mcp.tool()

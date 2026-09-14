@@ -91,11 +91,19 @@ def read_page(namespace: str, path: str) -> dict:
 
 # -- the full query cycle ---------------------------------------------------
 
-_GUIDANCE = (
-    "Answer the question using ONLY the evidence content above. Cite each claim with its "
-    "provenance.locator (page/section, or PDF page + bounding box). 'related' gives graph-"
-    "connected context. 'decision'/'lineage' record what was used, for audit — quote the "
-    "decision_id if the caller needs the trail."
+_HOW_TO_USE = (
+    "HOW TO USE THIS RESULT — read before acting. "
+    "(1) The `path` values are semantic-fabric knowledge-base references, NOT files on your "
+    "disk. Do NOT open them with file/read tools and do NOT scan the repository or run "
+    "grep/find — the answer is already here. "
+    "(2) Answer the question using the `content` of each evidence item, and cite the source "
+    "as its `path` plus `provenance.locator` (page/section, or PDF page + bounding box). "
+    "(3) `related` lists graph-connected pages (references with a short summary). To read a "
+    "full page — one from `related` or a deeper source — call "
+    "fabric_read_page(namespace='authored', path=<path>); it returns the page body over "
+    "HTTP from the fabric. Never fetch it from the local filesystem. "
+    "(4) `decision`/`lineage` are the audit trail; quote `decision.decision_id` if the "
+    "caller needs the provenance chain."
 )
 
 
@@ -131,12 +139,49 @@ def answer(question: str, top_k: int = 5, section: str | None = None,
         except Exception as e:
             decision = {"recorded": False, "error": str(e)}
 
-    return {
+    # `how_to_use` is intentionally FIRST so the agent reads the steering before the data.
+    out = {
+        "how_to_use": _HOW_TO_USE,
         "question": question,
         "fabric": base_url(),
+        "answer_from": "the `content` field of each evidence item below",
         "evidence": units,
         "related": related,
         "decision": decision,
         "lineage": lineage,
-        "guidance": _GUIDANCE,
+    }
+    if not units:
+        out["diagnostic"] = _empty_index_diagnostic()
+    return out
+
+
+def _empty_index_diagnostic() -> dict:
+    """When /search is empty, explain why — so the agent reports it, not scans the repo."""
+    try:
+        counts = graph_snapshot().get("counts", {})
+    except Exception:
+        counts = {}
+    has_graph = bool(counts.get("entities") or counts.get("relations") or counts.get("pages"))
+    if has_graph:
+        cause = (
+            "The knowledge GRAPH has data but the retrieval index (/search) returned nothing "
+            "— the index was not loaded. Most often the fabric was (re)started with "
+            "GRAPH_STORE=rdf (graph persists on disk) but WITHOUT FABRIC_DB, so the retrieval "
+            "index + KB — which are in-memory unless FABRIC_DB is set — were lost on restart. "
+            "FIX: start the fabric with BOTH FABRIC_DB=<path> and GRAPH_STORE=rdf, then "
+            "re-ingest ONCE so the index is persisted; thereafter restarts reload it. "
+            "(Or simply query the same running process you ingested into.)"
+        )
+    else:
+        cause = (
+            "This fabric appears to have no ingested data (the graph is empty too). Ingest a "
+            "corpus first — POST /ingest, or python demo/run_demo.py --source <dir> — then ask "
+            "again."
+        )
+    return {
+        "issue": "retrieval index empty for this query",
+        "graph_counts": counts,
+        "likely_cause": cause,
+        "do_not": ("Do NOT scan the local repository or read files — this is a fabric "
+                   "data/config issue. Report the likely_cause to the user."),
     }
