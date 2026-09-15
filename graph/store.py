@@ -16,10 +16,28 @@ dependency-free and CI-testable.
 
 from __future__ import annotations
 
+import os
 import re
 from collections import deque
 from pathlib import PurePosixPath
 from typing import Protocol
+
+
+def expand_max_nodes() -> int:
+    """Cap on how many nodes a single expand() may visit.
+
+    GraphRAG expansion is a BFS whose ``limit`` only truncates the OUTPUT — the walk
+    itself is unbounded. On a large, densely-connected graph a 2-hop expand from a page
+    that mentions a hub entity fans out to hundreds of pages per hop, so the traversal
+    (one neighbour query per node) explodes and the request appears to hang. Bounding the
+    visited set keeps expand responsive at any graph size: it explores the nearest
+    neighbourhood (BFS visits closest nodes first) and stops. Tune with
+    GRAPH_EXPAND_MAX_NODES; the default comfortably covers a top-k of related pages.
+    """
+    try:
+        return max(1, int(os.getenv("GRAPH_EXPAND_MAX_NODES", "250")))
+    except ValueError:
+        return 250
 
 
 def datalog_const(s: str) -> str:
@@ -199,9 +217,10 @@ class InMemoryGraphStore:
         visited = self._resolve_seed(seed)
         if not visited:
             return []
+        cap = expand_max_nodes()
         queue: deque[str] = deque(visited.keys())
         seed_is_page = seed.strip() in self._pages
-        while queue:
+        while queue and len(visited) < cap:
             path = queue.popleft()
             dist, _rel = visited[path]
             if dist >= hops:
@@ -210,6 +229,8 @@ class InMemoryGraphStore:
                 if neighbour not in visited:
                     visited[neighbour] = (dist + 1, relation)
                     queue.append(neighbour)
+                    if len(visited) >= cap:
+                        break
 
         results: list[dict] = []
         for path, (dist, relation) in visited.items():

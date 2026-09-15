@@ -32,7 +32,7 @@ from __future__ import annotations
 
 from urllib.parse import quote
 
-from .store import GraphStore, datalog_const, nearest_parent
+from .store import GraphStore, datalog_const, expand_max_nodes, nearest_parent
 
 EX = "http://semantic-fabric/ex#"
 RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
@@ -155,8 +155,8 @@ class OxigraphGraphStore(GraphStore):
     # -- SPARQL-native traversal ---------------------------------------------
     _EDGE_TEMPLATES = {
         "hierarchy": (
-            "{{ <{p}> ex:parentPage ?n . BIND('parent' AS ?rel) }}"
-            " UNION {{ ?n ex:parentPage <{p}> . BIND('child' AS ?rel) }}"
+            "{{ <{p}> ex:parentPage ?n . ?n ex:path ?np . BIND('parent' AS ?rel) }}"
+            " UNION {{ ?n ex:parentPage <{p}> . ?n ex:path ?np . BIND('child' AS ?rel) }}"
         ),
         "topic": (
             "{{ <{p}> ex:topic ?t . ?n ex:topic ?t . ?n ex:path ?np . FILTER(?n != <{p}>)"
@@ -175,33 +175,41 @@ class OxigraphGraphStore(GraphStore):
         ),
     }
 
-    def _neighbours(self, path: str, rel_types: list[str] | None) -> list[tuple[str, str]]:
+    def _neighbours(
+        self, path: str, rel_types: list[str] | None, cap: int
+    ) -> list[tuple[str, str]]:
         want = rel_types or list(self._EDGE_TEMPLATES)
         blocks = [self._EDGE_TEMPLATES[k].format(p=self._page_iri(path))
                   for k in want if k in self._EDGE_TEMPLATES]
         if not blocks:
             return []
-        query = "SELECT DISTINCT ?n ?rel WHERE { " + " UNION ".join(blocks) + " }"
+        # Bind the neighbour's path (?np) inside the templates so we needn't run a
+        # per-neighbour _path_of() lookup, and LIMIT so a hub node (mentioned by
+        # hundreds of pages) can't return an unbounded result set.
+        query = (
+            "SELECT DISTINCT ?np ?rel WHERE { "
+            + " UNION ".join(blocks)
+            + f" }} LIMIT {cap}"
+        )
         seen: dict[str, str] = {}
         for row in self._select(query):
-            npath = self._path_of(row["n"])
+            npath = row.get("np")
             if npath and npath not in seen:
                 seen[npath] = row["rel"]
         return list(seen.items())
 
-    def _path_of(self, page_iri: str | None) -> str | None:
-        if not page_iri:
-            return None
-        rows = self._select(f"SELECT ?p WHERE {{ <{page_iri}> ex:path ?p }}")
-        return rows[0]["p"] if rows else None
-
-    def _page_meta(self, path: str) -> dict:
+    def _page_meta_bulk(self, paths: list[str]) -> dict[str, dict]:
+        """Title + summary for many pages in ONE query (avoids a per-result N+1)."""
+        if not paths:
+            return {}
+        values = " ".join(f"'{_esc(p)}'" for p in paths)
         rows = self._select(
-            f"SELECT ?title ?summary WHERE {{ <{self._page_iri(path)}> "
-            f"rdfs:label ?title ; ex:summary ?summary }}"
+            "SELECT ?path ?title ?summary WHERE { "
+            f"VALUES ?path {{ {values} }} "
+            "?pg ex:path ?path ; rdfs:label ?title ; ex:summary ?summary }"
         )
-        r = rows[0] if rows else {}
-        return {"title": r.get("title") or path, "summary": r.get("summary") or ""}
+        return {r["path"]: {"title": r["title"] or r["path"], "summary": r["summary"] or ""}
+                for r in rows}
 
     def _resolve_seed(self, seed: str) -> dict[str, tuple[int, str]]:
         seed = seed.strip()
@@ -230,25 +238,30 @@ class OxigraphGraphStore(GraphStore):
             return []
         from collections import deque
 
+        cap = expand_max_nodes()
         queue: deque[str] = deque(visited.keys())
         seed_is_page = seed.strip() in visited and visited[seed.strip()][0] == 0
-        while queue:
+        while queue and len(visited) < cap:
             path = queue.popleft()
             dist, _rel = visited[path]
             if dist >= hops:
                 continue
-            for neighbour, relation in self._neighbours(path, rel_types):
+            for neighbour, relation in self._neighbours(path, rel_types, cap):
                 if neighbour not in visited:
                     visited[neighbour] = (dist + 1, relation)
                     queue.append(neighbour)
+                    if len(visited) >= cap:
+                        break
 
+        result_paths = [p for p, (dist, _r) in visited.items()
+                        if not (seed_is_page and dist == 0)]
+        meta = self._page_meta_bulk(result_paths)
         results: list[dict] = []
-        for path, (dist, relation) in visited.items():
-            if seed_is_page and dist == 0:
-                continue
-            meta = self._page_meta(path)
+        for path in result_paths:
+            dist, relation = visited[path]
+            m = meta.get(path, {"title": path, "summary": ""})
             results.append({
-                "path": path, "title": meta["title"], "summary": meta["summary"],
+                "path": path, "title": m["title"], "summary": m["summary"],
                 "relation": relation, "distance": dist,
             })
         results.sort(key=lambda r: (r["distance"], r["title"]))
