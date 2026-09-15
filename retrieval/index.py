@@ -183,6 +183,14 @@ class RetrievalIndex:
     def size(self) -> int:
         return len(self._chunks)
 
+    def warm(self) -> None:
+        """Force lazy backends (notably the embedding model) to initialise now.
+
+        Called at API startup so the model load — and its HuggingFace Hub round-trip —
+        happens once at boot instead of on the first /search request.
+        """
+        self._embedder.embed(["warmup"])
+
     @property
     def graph(self) -> GraphStore:
         return self._graph

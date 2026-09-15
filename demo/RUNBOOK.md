@@ -148,6 +148,9 @@ pip install -e ".[prod,semantica,llm,pdf,graph]"
 # retrieval: real BGE-M3 embeddings over the in-memory vector store — this alone gives
 # real hybrid retrieval, no external service needed. Leave VECTOR_STORE unset (default).
 export EMBEDDING_MODEL=BAAI/bge-m3
+# The API warms this model at startup (so no query eats the cold load). Once it's cached,
+# skip the HuggingFace Hub round-trip on every boot — instant, proxy-independent loads:
+export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 # OPTIONAL: only if you actually run a Qdrant server. On localhost behind a corporate
 # proxy you must also bypass it, or the platform will fall back to in-memory:
 #   export VECTOR_STORE=qdrant QDRANT_URL=http://localhost:6333
@@ -299,6 +302,8 @@ returned evidence (each with `provenance.locator`), and answers with citations;
 | Captions are placeholders | The caption model isn't vision-capable on your gateway; set `CAPTION_MODEL` to one that is (optional). |
 | Reasoning answer is `No` | The synthesized demo rule derives from the *first* extracted relation; with an empty graph there are no relations to reason over. |
 | Client `timed out` / ingest very slow on a big corpus | Extraction-on-ingest is one LLM call per page — see §9. |
+| **First `/search` after a (re)start hangs ~10s+, later queries are instant** | With `EMBEDDING_MODEL=BAAI/bge-m3`, the model loads on first use. The API now **warms it at startup** (uvicorn holds "startup" until the model is loaded — a slow boot, never a hung query). If boot itself is slow/variable, it's the HuggingFace Hub round-trip through your proxy: once the model is cached, `export HF_HUB_OFFLINE=1` (and `TRANSFORMERS_OFFLINE=1`) to load from local cache with **no** Hub call. Set `WARM_INDEX=false` to opt out of warm-up. |
+| Server log: `search stages (ms): … total=…` | Per-stage `/search` timing. `SEARCH_TIMING=1` logs every query; any stage over `SEARCH_SLOW_MS` (default 1500) warns. `vector=` high → Qdrant/proxy; `bm25=` high → lexical scan; `embed=` high → embedder (should be one-off; see the row above). `scripts/diag_search.py` isolates Qdrant-vs-proxy end to end. |
 
 ---
 

@@ -11,7 +11,10 @@ Run: uvicorn api.main:app --reload --port 8080
 
 from __future__ import annotations
 
+import logging
 import os
+import time
+from contextlib import asynccontextmanager
 
 from fabric_client.models import (
     CONTRACT_VERSION,
@@ -49,10 +52,42 @@ from .state import (
     get_validator,
 )
 
+logger = logging.getLogger("semantic_fabric.api")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Warm the retrieval index (and its embedding model) at startup.
+
+    The production embedder (BGE-M3) loads a multi-file model on first construction —
+    seconds of work, plus a HuggingFace Hub round-trip that, behind a corporate proxy,
+    can stretch from seconds into a stall. Left lazy, that cost lands on the FIRST
+    /search of each process, so a fresh restart makes one query "hang" for 10s+ while
+    every later query is milliseconds. Paying it here moves it into boot, where uvicorn
+    holds "startup" until it's done, so no user request ever eats a cold model load.
+
+    Set WARM_INDEX=false to skip (e.g. fast boots in tests). Warm-up never blocks
+    startup: a failure is logged and the index falls back to lazy construction.
+    """
+    if os.getenv("WARM_INDEX", "true").strip().lower() not in {"0", "false", "no"}:
+        model = os.getenv("EMBEDDING_MODEL") or "hashing"
+        logger.info("warming retrieval index (embedding model=%s)…", model)
+        t0 = time.perf_counter()
+        try:
+            idx = get_index()
+            idx.warm()  # force any lazily-initialised backend to load now
+            logger.info("retrieval index warm in %.1fs (chunks=%d)",
+                        time.perf_counter() - t0, idx.size)
+        except Exception as exc:  # never block startup on warm-up
+            logger.warning("index warm-up failed (continuing lazily): %s", exc)
+    yield
+
+
 app = FastAPI(
     title="semantic-fabric",
     version="0.1.0",
     summary="Enterprise semantic layer: retrieval, graph, ingestion, reasoning, provenance.",
+    lifespan=lifespan,
 )
 
 
