@@ -27,6 +27,48 @@ def test_inmemory_snapshot_shape():
     assert {"subject": "Aviva", "predicate": "offers", "object": "ISA"} in snap["relations"]
 
 
+def _norm(snap: dict) -> dict:
+    """Order-independent view of a snapshot for cross-backend comparison."""
+    return {
+        "pages": sorted(
+            ({**p, "topics": sorted(p["topics"])} for p in snap["pages"]),
+            key=lambda p: p["path"],
+        ),
+        "entities": sorted(
+            ({**e, "pages": sorted(e["pages"])} for e in snap["entities"]),
+            key=lambda e: e["name"],
+        ),
+        "relations": sorted(
+            snap["relations"], key=lambda r: (r["subject"], r["predicate"], r["object"])
+        ),
+    }
+
+
+def test_oxigraph_snapshot_matches_inmemory(tmp_path):
+    """The aggregate-query Oxigraph snapshot must match the in-memory backend exactly."""
+    import pytest
+
+    pytest.importorskip("pyoxigraph")
+    from graph.oxigraph_backend import OxigraphGraphStore
+
+    def populate(g):
+        g.add_page("investments/index.md", "Investments", "Overview.", ["tax"], "investments")
+        g.add_page("investments/isas/index.md", "ISAs", "Tax-efficient.",
+                   ["isa", "savings"], "investments")
+        g.add_page("investments/isas/cash.md", "Cash ISA", "A cash ISA.",
+                   ["savings"], "investments")
+        g.add_entity("Aviva", "Org", page_path="investments/isas/index.md")
+        g.add_entity("Aviva", "Org", page_path="investments/isas/cash.md")
+        g.add_entity("ISA", "Product", page_path="investments/isas/index.md")
+        g.add_relation("Aviva", "offers", "ISA")
+
+    mem = InMemoryGraphStore()
+    oxi = OxigraphGraphStore(str(tmp_path / "oxi"))
+    populate(mem)
+    populate(oxi)
+    assert _norm(oxi.snapshot()) == _norm(mem.snapshot())
+
+
 def test_graph_endpoint_returns_snapshot_with_counts():
     idx = state.get_index()
     idx.graph.add_entity("Aviva", "Org", page_path="p/index.md")

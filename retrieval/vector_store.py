@@ -11,9 +11,14 @@ Selected by ``VECTOR_STORE`` (``memory`` default, ``qdrant`` in deployment).
 from __future__ import annotations
 
 import logging
+import os
 from typing import Protocol
 
 logger = logging.getLogger(__name__)
+
+# Bound every Qdrant call so a stalled connection (e.g. localhost routed through a
+# corporate/agent proxy) fails fast instead of hanging /search forever.
+_QDRANT_TIMEOUT = float(os.getenv("QDRANT_TIMEOUT", "15"))
 
 
 class VectorStore(Protocol):
@@ -63,7 +68,7 @@ class QdrantVectorStore:
         if url.strip().lower() in {":memory:", "memory"}:
             self._client = QdrantClient(location=":memory:")
         else:
-            self._client = QdrantClient(url=url)
+            self._client = QdrantClient(url=url, timeout=_QDRANT_TIMEOUT)
         self._collection = collection
         # Counter for stable integer point ids (Qdrant ids must be int/UUID).
         self._next_id = 0

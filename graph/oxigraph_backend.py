@@ -275,37 +275,53 @@ class OxigraphGraphStore(GraphStore):
         return sorted(set(out))
 
     def snapshot(self) -> dict:
-        """Whole-graph view gathered by SPARQL: {pages, entities, relations}."""
-        pages = []
+        """Whole-graph view gathered by SPARQL: {pages, entities, relations}.
+
+        Uses a FIXED number of aggregate queries (not one-per-page / one-per-entity),
+        grouping the rows in Python. The earlier version issued ~4 queries per page plus
+        one per entity, so on a large graph (thousands of entities) a single /graph call
+        fired thousands of SPARQL queries and pegged the process — starving concurrent
+        /search requests until it finished. This keeps it to a handful of scans.
+        """
+        # Pages: one row per page; parent, topics and section folded in by later scans.
+        pages_by_path: dict[str, dict] = {}
         for r in self._select(
-            "SELECT ?path ?title WHERE { ?pg ex:path ?path ; rdfs:label ?title }"
+            "SELECT ?path ?title ?section WHERE { ?pg ex:path ?path ; rdfs:label ?title ."
+            " OPTIONAL { ?pg ex:section ?section } }"
         ):
-            path = r["path"]
-            par = self._select(
-                f"SELECT ?pp WHERE {{ ?c ex:path '{_esc(path)}' ; ex:parentPage ?p ."
-                f" ?p ex:path ?pp }}"
-            )
-            topics = [t["t"] for t in self._select(
-                f"SELECT ?t WHERE {{ ?pg ex:path '{_esc(path)}' ; ex:topic ?t }}"
-            )]
-            sect = self._select(
-                f"SELECT ?s WHERE {{ ?pg ex:path '{_esc(path)}' ; ex:section ?s }}"
-            )
-            pages.append({
-                "path": path, "title": r["title"],
-                "parent": par[0]["pp"] if par else None,
-                "topics": sorted(topics), "section": sect[0]["s"] if sect else "",
+            pages_by_path.setdefault(r["path"], {
+                "path": r["path"], "title": r["title"],
+                "parent": None, "topics": set(), "section": r.get("section") or "",
             })
-        entities = []
+        for r in self._select(
+            "SELECT ?cp ?pp WHERE { ?c ex:path ?cp ; ex:parentPage ?p . ?p ex:path ?pp }"
+        ):
+            page = pages_by_path.get(r["cp"])
+            if page is not None:
+                page["parent"] = r["pp"]
+        for r in self._select("SELECT ?path ?t WHERE { ?pg ex:path ?path ; ex:topic ?t }"):
+            page = pages_by_path.get(r["path"])
+            if page is not None:
+                page["topics"].add(r["t"])
+        pages = [{**p, "topics": sorted(p["topics"])} for p in pages_by_path.values()]
+
+        # Entities: one scan for the entities, one for their page mentions.
+        ent_by_name: dict[str, dict] = {}
         for r in self._select(
             "SELECT ?n ?t WHERE { ?e a ex:Entity ; ex:name ?n . OPTIONAL { ?e ex:etype ?t } }"
         ):
-            epages = [m["path"] for m in self._select(
-                f"SELECT ?path WHERE {{ ?e ex:name '{_esc(r['n'])}' . ?pg ex:mentions ?e ;"
-                f" ex:path ?path }}"
-            )]
-            entities.append({"name": r["n"], "type": r.get("t") or "Unknown",
-                             "pages": sorted(set(epages))})
+            ent_by_name.setdefault(
+                r["n"], {"name": r["n"], "type": r.get("t") or "Unknown", "pages": set()}
+            )
+        for r in self._select(
+            "SELECT ?n ?path WHERE { ?pg ex:mentions ?e . ?e ex:name ?n . ?pg ex:path ?path }"
+        ):
+            ent = ent_by_name.get(r["n"])
+            if ent is not None:
+                ent["pages"].add(r["path"])
+        entities = [{"name": e["name"], "type": e["type"], "pages": sorted(e["pages"])}
+                    for e in ent_by_name.values()]
+
         relations = [
             {"subject": r["sn"], "predicate": r["p"], "object": r["on"]}
             for r in self._select(
