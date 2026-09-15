@@ -9,7 +9,9 @@ fabric_client EvidenceUnits.
 
 from __future__ import annotations
 
+import logging
 import os
+import time
 
 from fabric_client.models import EvidenceType, EvidenceUnit, Provenance
 
@@ -20,7 +22,15 @@ from .chunking import Chunk, chunk_page
 from .embedder import Embedder, build_embedder
 from .vector_store import InMemoryVectorStore, VectorStore, build_vector_store
 
+logger = logging.getLogger(__name__)
+
 RRF_K = 60  # standard RRF damping constant
+
+# Per-stage timing for /search. Set SEARCH_TIMING=1 to log every query's stage
+# breakdown at INFO; regardless, a stage slower than SEARCH_SLOW_MS logs a WARNING so a
+# hang is attributed to embed / vector-store / bm25 without guesswork.
+_TIMING = os.getenv("SEARCH_TIMING", "").strip().lower() in {"1", "true", "yes"}
+_SLOW_MS = float(os.getenv("SEARCH_SLOW_MS", "1500"))
 
 
 def _page_summary(frontmatter: dict, body: str) -> str:
@@ -190,9 +200,27 @@ class RetrievalIndex:
         if not self._chunks:
             return []
         pool = max(top_k * 4, 20)
+
+        t0 = time.perf_counter()
         q_vec = self._embedder.embed([query])[0]
+        t_embed = time.perf_counter()
         vec_hits = self._vs.query(q_vec, pool)
+        t_vec = time.perf_counter()
         bm25_hits = self._bm25.search(query, pool)
+        t_bm25 = time.perf_counter()
+
+        embed_ms = (t_embed - t0) * 1000
+        vec_ms = (t_vec - t_embed) * 1000
+        bm25_ms = (t_bm25 - t_vec) * 1000
+        total_ms = (t_bm25 - t0) * 1000
+        if _TIMING or total_ms >= _SLOW_MS:
+            log = logger.warning if total_ms >= _SLOW_MS else logger.info
+            log(
+                "search stages (ms): embed=%.0f vector=%.0f bm25=%.0f total=%.0f "
+                "[chunks=%d, %s]",
+                embed_ms, vec_ms, bm25_ms, total_ms, len(self._chunks),
+                type(self._vs).__name__,
+            )
 
         # Reciprocal Rank Fusion across the two rankings.
         fused: dict[str, float] = {}
