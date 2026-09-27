@@ -1,9 +1,17 @@
 # Implementation plan — enrich at ingest with semantica, serve through our contract
 
-**Audience:** an independent engineering agent with full access to this repo.
-**Supersedes:** the earlier three-feature draft (NLP extraction / kg analytics / decision
-intelligence). Those capabilities survive, but re-sequenced into dependency-ordered phases
-that reflect what we concluded:
+**Audience:** an engineering agent with full access to this repo and no other context. This
+document is self-contained: it names the exact files, protocols, env vars and endpoints to
+change, and every phase can be implemented from the repo as it stands.
+
+**semantica** is the third-party library this project already depends on (optional extra
+`semantica==0.6.8`, see `pyproject.toml`). This project uses it today only as three narrow,
+env-selected backends (PROV-O provenance, Datalog reasoning, SHACL validation). This plan
+extends that usage — through the same pluggable-backend pattern — so semantica enriches the
+knowledge graph **at ingest time**, while the project's own REST contract and retrieval stay
+the serving layer.
+
+**Guiding principles** (the rest of the plan follows from these):
 
 - **Query-time richness is capped by what ingest materialises.** The goal is to capture as
   much semantic structure as possible **at ingest** — a properly-built knowledge graph,
@@ -18,12 +26,13 @@ that reflect what we concluded:
   the graph still physically lives in the embedded Oxigraph RocksDB directory
   (`GRAPH_DB_PATH`). The substrate stays behind our `GraphStore` protocol.
 - **Extraction is LLM-powered, via semantica in LLM mode.** semantica's *NLP* extraction
-  was tried on-env and produced wrong entities — it is **not used**. We use semantica's
-  entity/relation extractors in their **LLM mode**, driven through our existing gateway.
+  mode produces low-quality entities on this domain and is **not used**. Use semantica's
+  entity/relation extractors in their **LLM mode**, driven through the project's existing
+  LiteLLM gateway. Do not add or expose an NLP extraction option.
 
 ---
 
-## Target architecture (what we are building toward)
+## Target architecture (the end state this plan builds)
 
 ```
 INGEST (materialise, once)                         SERVE (read + fuse, per query)
@@ -87,11 +96,14 @@ Mirror how every optional backend already works; reviewers reject deviations.
   tests). New services get the same treatment.
 - **CI runs defaults only.** Optional-backend tests use `pytest.importorskip("semantica")`
   and are wired into `scripts/validate.sh`, never the default `pytest` run.
-- **Spike before you code (mandatory).** semantica `0.6.8` is uneven — we already found
-  `reasoning.SPARQLReasoner` ships as a stub (`scripts/inspect_semantica_graph.py`,
-  `TODO.md`). Every phase that touches semantica starts with an on-env introspection spike
-  (model: `scripts/inspect_semantica_graph.py`). If a class named here is absent or a stub,
-  record it in `TODO.md` and ship the default backend + adapter seam anyway (drop-in later).
+- **Spike before you code (mandatory).** semantica `0.6.8` is uneven — its published API is
+  broader than every class actually implements (for example `reasoning.SPARQLReasoner`
+  ships as an unimplemented stub; see `scripts/inspect_semantica_graph.py` and `TODO.md`).
+  Every phase that touches semantica starts with an on-env introspection spike (use the
+  existing `scripts/inspect_semantica_graph.py` as the template). If a class named in this
+  plan is absent or a stub, record it in `TODO.md` and still ship the dependency-free
+  default backend and the adapter seam, so the semantica backend is a later drop-in with no
+  API change.
 - **Gates:** `ruff check .` clean; default `pytest -q` green (baseline **72 passed /
   6 skipped**, commit `b5cab8e`); wire additions backward-compatible.
 
@@ -244,7 +256,8 @@ Needs typed entities (Phases 1–2) to exist.
 
 **Goal:** at ingest, seed a small hand-authored domain ontology (insurance/pensions core
 classes) and **auto-generate/align** the rest with semantica's `OntologyGenerator`; type
-extracted entities against it; validate with SHACL (we already have `run_shacl_validation`);
+extracted entities against it; validate with SHACL (the repo already wires
+`run_shacl_validation` in `ontology/shacl_backend.py`);
 optional SKOS vocabulary.
 
 **Anchors:** `ontology/validator.py`, `ontology/shacl_backend.py` (`run_shacl_validation`,
